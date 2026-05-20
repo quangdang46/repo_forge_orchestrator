@@ -80,6 +80,7 @@ wiremock        = "0.6"
 assert_cmd      = "2.0"
 predicates       = "3.1"
 globset         = "0.4"
+serde_yaml      = "0.9"
 
 # Release profile — matches cargo-dist conventions.
 [profile.release]
