@@ -32,7 +32,12 @@ feature-depth = 1
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+# Tracked exceptions:
+# RUSTSEC-2025-0119 — `number_prefix` is unmaintained but only enters via
+# `indicatif` <= 0.17.x; revisit when upstream switches to `unit-prefix`.
+ignore = [
+    "RUSTSEC-2025-0119",
+]
 
 # ---------------------------------------------------------------------------
 # Licenses: only allow well-known permissive / copyleft-compatible licenses.

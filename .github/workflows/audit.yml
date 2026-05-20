@@ -35,4 +35,6 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install cargo-audit --locked
-      - run: cargo audit --deny warnings
+      # Ignored advisories are tracked in deny.toml [advisories.ignore].
+      # RUSTSEC-2025-0119 — number_prefix unmaintained (transitive via indicatif <= 0.17).
+      - run: cargo audit --deny warnings --ignore RUSTSEC-2025-0119
