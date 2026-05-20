@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 //! GitHub API client for rfo.
 //!
 //! Auth discovery, repo lookup, issue/PR/check queries.
@@ -10,3 +12,4 @@ pub mod issues;
 
 pub use auth::{AuthToken, build_client, discover_token};
 pub use client::{RepoMetadata, RepoVisibility, fetch_repo};
+pub use issues::{IssueOrPr, ItemKind, ListOpts, list_issues, list_pulls};
