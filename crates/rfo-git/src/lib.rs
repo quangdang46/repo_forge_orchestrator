@@ -9,4 +9,8 @@ pub mod mutation;
 pub mod read;
 pub mod status;
 
-pub use status::RepoStatus;
+pub use mutation::{
+    CloneOpts, CloneOutcome, FetchOpts, GitCommandResult, GitErrorKind, PullOpts, PullOutcome,
+    PullStrategy, PushOpts,
+};
+pub use status::{AheadBehind, RepoStatus};
