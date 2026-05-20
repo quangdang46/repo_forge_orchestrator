@@ -18,3 +18,9 @@ anyhow.workspace = true
 tracing.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
+time.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+wiremock.workspace = true

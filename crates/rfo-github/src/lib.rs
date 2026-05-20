@@ -9,3 +9,4 @@ pub mod client;
 pub mod issues;
 
 pub use auth::{AuthToken, build_client, discover_token};
+pub use client::{RepoMetadata, RepoVisibility, fetch_repo};
