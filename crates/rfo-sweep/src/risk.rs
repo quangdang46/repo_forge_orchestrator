@@ -122,22 +122,13 @@ mod tests {
 
     #[test]
     fn single_non_critical_is_medium() {
-        assert_eq!(
-            classify(&[RiskReason::TouchesManyFiles]),
-            RiskLevel::Medium
-        );
-        assert_eq!(
-            classify(&[RiskReason::NoTestsChanged]),
-            RiskLevel::Medium
-        );
+        assert_eq!(classify(&[RiskReason::TouchesManyFiles]), RiskLevel::Medium);
+        assert_eq!(classify(&[RiskReason::NoTestsChanged]), RiskLevel::Medium);
     }
 
     #[test]
     fn modifies_ci_is_high() {
-        assert_eq!(
-            classify(&[RiskReason::ModifiesCiWorkflow]),
-            RiskLevel::High
-        );
+        assert_eq!(classify(&[RiskReason::ModifiesCiWorkflow]), RiskLevel::High);
     }
 
     #[test]
@@ -156,10 +147,7 @@ mod tests {
     #[test]
     fn two_reasons_is_high() {
         assert_eq!(
-            classify(&[
-                RiskReason::TouchesManyFiles,
-                RiskReason::NoTestsChanged
-            ]),
+            classify(&[RiskReason::TouchesManyFiles, RiskReason::NoTestsChanged]),
             RiskLevel::High
         );
     }

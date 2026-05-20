@@ -11,4 +11,8 @@ pub mod risk;
 pub mod secret_scan;
 pub mod train;
 
+pub use denylist::{DEFAULT_DENYLIST, Denylist};
 pub use risk::{RiskLevel, RiskReason, classify, to_json};
+pub use secret_scan::{
+    SecretFinding, SecretScanMode, scan_file, scan_files, scan_text, should_block,
+};
