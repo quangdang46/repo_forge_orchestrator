@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Top-level application configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default)]
     pub core: CoreConfig,
@@ -15,7 +15,7 @@ pub struct AppConfig {
     pub safety: SafetyConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CoreConfig {
     #[serde(default = "default_projects_dir")]
     pub projects_dir: String,
@@ -27,7 +27,7 @@ pub struct CoreConfig {
     pub timeout_secs: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GitHubConfig {
     #[serde(default = "default_github_host")]
     pub host: String,
@@ -35,7 +35,7 @@ pub struct GitHubConfig {
     pub auth: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GitConfig {
     #[serde(default = "default_strategy")]
     pub update_strategy: String,
@@ -45,7 +45,7 @@ pub struct GitConfig {
     pub terminal_prompt: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SafetyConfig {
     #[serde(default = "default_secret_scan")]
     pub secret_scan: String,
@@ -87,51 +87,4 @@ fn default_true() -> bool {
 }
 fn default_false() -> bool {
     false
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            core: CoreConfig::default(),
-            github: GitHubConfig::default(),
-            git: GitConfig::default(),
-            safety: SafetyConfig::default(),
-        }
-    }
-}
-impl Default for CoreConfig {
-    fn default() -> Self {
-        Self {
-            projects_dir: default_projects_dir(),
-            layout: default_layout(),
-            parallel: default_parallel(),
-            timeout_secs: default_timeout(),
-        }
-    }
-}
-impl Default for GitHubConfig {
-    fn default() -> Self {
-        Self {
-            host: default_github_host(),
-            auth: default_auth(),
-        }
-    }
-}
-impl Default for GitConfig {
-    fn default() -> Self {
-        Self {
-            update_strategy: default_strategy(),
-            autostash: false,
-            terminal_prompt: false,
-        }
-    }
-}
-impl Default for SafetyConfig {
-    fn default() -> Self {
-        Self {
-            secret_scan: default_secret_scan(),
-            require_plan_for_ai_apply: true,
-            max_auto_apply_risk: default_max_risk(),
-        }
-    }
 }
