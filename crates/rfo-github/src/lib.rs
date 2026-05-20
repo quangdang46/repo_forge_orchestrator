@@ -11,5 +11,8 @@ pub mod client;
 pub mod issues;
 
 pub use auth::{AuthToken, build_client, discover_token};
+pub use checks::{
+    CheckConclusion, CheckResult, CheckSource, CheckStatus, list_check_runs, list_workflow_runs,
+};
 pub use client::{RepoMetadata, RepoVisibility, fetch_repo};
 pub use issues::{IssueOrPr, ItemKind, ListOpts, list_issues, list_pulls};
