@@ -1,0 +1,31 @@
+[package]
+name = "rfo"
+description = "GitHub-first repo orchestration CLI"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "rfo"
+path = "src/main.rs"
+
+[dependencies]
+rfo-core.workspace = true
+rfo-config.workspace = true
+rfo-output.workspace = true
+rfo-state.workspace = true
+rfo-git.workspace = true
+rfo-github.workspace = true
+rfo-sync.workspace = true
+rfo-context.workspace = true
+rfo-review.workspace = true
+rfo-sweep.workspace = true
+rfo-provider.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true

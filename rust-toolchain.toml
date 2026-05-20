@@ -1,0 +1,9 @@
+# Pinned toolchain for repo_forge.
+#
+# Edition: Rust 2024 (stabilized in 1.85).
+# We pin to stable 1.95 for reproducible CI; MSRV is 1.85+.
+# Bump in lockstep with CI matrix and `package.rust-version` in Cargo.toml.
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -1,0 +1,83 @@
+# cargo-deny configuration for repo_forge.
+#
+# Run via:
+#   cargo deny check         # all
+#   cargo deny check advisories
+#   cargo deny check licenses
+#   cargo deny check bans
+#   cargo deny check sources
+#
+# Keep policy strict but pragmatic; loosen with explicit allow-lists, never
+# with blanket `unmaintained = "allow"` style overrides.
+
+[graph]
+# All targets we expect to ship binaries for (matches release matrix).
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-unknown-linux-musl" },
+    { triple = "aarch64-unknown-linux-musl" },
+    { triple = "x86_64-apple-darwin" },
+    { triple = "aarch64-apple-darwin" },
+    { triple = "x86_64-pc-windows-msvc" },
+]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+# ---------------------------------------------------------------------------
+# Advisories: refuse known vulnerable / yanked deps.
+# ---------------------------------------------------------------------------
+[advisories]
+version = 2
+yanked = "deny"
+ignore = []
+
+# ---------------------------------------------------------------------------
+# Licenses: only allow well-known permissive / copyleft-compatible licenses.
+# ---------------------------------------------------------------------------
+[licenses]
+version = 2
+confidence-threshold = 0.93
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "MPL-2.0",
+    "Zlib",
+    "CC0-1.0",
+    "0BSD",
+]
+exceptions = []
+
+# ---------------------------------------------------------------------------
+# Bans: forbid duplicate major versions of foundational crates and any
+# package we explicitly want to keep out of the dep graph.
+# ---------------------------------------------------------------------------
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+# We will not depend on these directly; if a transitive dep pulls them in,
+# revisit the dep choice rather than silencing the ban.
+deny = [
+    { name = "openssl", reason = "prefer rustls-based TLS stack" },
+    { name = "openssl-sys", reason = "prefer rustls-based TLS stack" },
+]
+skip = []
+skip-tree = []
+
+# ---------------------------------------------------------------------------
+# Sources: only crates.io and our own repo for git deps.
+# ---------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
