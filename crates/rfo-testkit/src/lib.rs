@@ -14,8 +14,5 @@ use rusqlite::Connection;
 
 /// Create an in-memory SQLite database with migrations applied.
 pub fn test_db() -> Result<Connection> {
-    let conn = Connection::open_in_memory()?;
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
-    rfo_state::migrate::run(&conn)?;
-    Ok(conn)
+    rfo_state::open_memory()
 }
