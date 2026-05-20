@@ -10,3 +10,5 @@ pub mod quality_gates;
 pub mod risk;
 pub mod secret_scan;
 pub mod train;
+
+pub use risk::{RiskLevel, RiskReason, classify, to_json};
