@@ -2806,6 +2806,8 @@ dependencies = [
  "dirs",
  "rfo-core",
  "serde",
+ "serde_json",
+ "tempfile",
  "toml",
  "tracing",
 ]
