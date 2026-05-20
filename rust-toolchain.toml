@@ -1,9 +1,11 @@
 # Pinned toolchain for repo_forge.
 #
 # Edition: Rust 2024 (stabilized in 1.85).
-# We pin to stable 1.95 for reproducible CI; MSRV is 1.85+.
-# Bump in lockstep with CI matrix and `package.rust-version` in Cargo.toml.
+# We track the latest stable channel for CI; MSRV is 1.85 (enforced via
+# `package.rust-version` in Cargo.toml).
+# Pin to a specific channel locally if reproducibility matters; CI uses
+# `dtolnay/rust-toolchain@stable` everywhere for consistency.
 [toolchain]
-channel = "1.95.0"
+channel = "stable"
 components = ["rustfmt", "clippy"]
 profile = "minimal"
