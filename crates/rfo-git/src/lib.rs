@@ -9,6 +9,7 @@ pub mod mutation;
 pub mod read;
 pub mod status;
 
+pub use lock::RepoLock;
 pub use mutation::{
     CloneOpts, CloneOutcome, FetchOpts, GitCommandResult, GitErrorKind, PullOpts, PullOutcome,
     PullStrategy, PushOpts,
