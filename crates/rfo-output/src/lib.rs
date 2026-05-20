@@ -12,9 +12,13 @@
 
 pub mod format;
 pub mod json;
+pub mod ndjson;
 pub mod text;
 
 use std::io::Write;
+
+// Re-export NDJSON types for ergonomic use
+pub use ndjson::{NdjsonEvent, NdjsonWriter};
 
 /// Output format selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
