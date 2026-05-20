@@ -12,6 +12,9 @@ pub mod secret_scan;
 pub mod train;
 
 pub use denylist::{DEFAULT_DENYLIST, Denylist};
+pub use quality_gates::{
+    Ecosystem, Gate, GateResult, GateStatus, any_failed, detect, run_all, run_gate,
+};
 pub use risk::{RiskLevel, RiskReason, classify, to_json};
 pub use secret_scan::{
     SecretFinding, SecretScanMode, scan_file, scan_files, scan_text, should_block,
