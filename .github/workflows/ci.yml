@@ -58,18 +58,22 @@ jobs:
       - run: cargo test --doc --workspace
 
   build:
-    name: Build
+    name: Build (${{ matrix.target }})
     needs: [fmt, clippy, test]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
           - os: macos-latest
             target: aarch64-apple-darwin
           - os: windows-latest
@@ -82,4 +86,22 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: ${{ matrix.target }}
+      # musl static linking needs the musl C toolchain on Linux.
+      - name: Install musl tooling
+        if: contains(matrix.target, 'linux-musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools
+      # ARM cross-compilation: install cross-compiler on x86_64 Ubuntu.
+      # On native ARM runners (ubuntu-24.04-arm), the default linker works.
+      - name: Install ARM cross-compiler
+        if: contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+      - name: Configure ARM cross-linker
+        if: contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64'
+        run: |
+          mkdir -p .cargo
+          printf '[target.aarch64-unknown-linux-gnu]\nlinker = "aarch64-linux-gnu-gcc"\n' >> .cargo/config.toml
       - run: cargo build --release --workspace --target ${{ matrix.target }}

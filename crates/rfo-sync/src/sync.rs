@@ -4,6 +4,7 @@
 //! acquire fs4 lock → clone if missing → fetch → pull per strategy
 //! → record pre/post OID → release lock.
 
+use clap::ValueEnum;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -14,6 +15,7 @@ use crate::manage::TrackedRepo;
 /// Update strategy for syncing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(ValueEnum)]
 pub enum SyncStrategy {
     FfOnly,
     Rebase,

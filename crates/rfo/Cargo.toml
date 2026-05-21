@@ -20,6 +20,7 @@ rfo-output.workspace = true
 rfo-state.workspace = true
 rfo-git.workspace = true
 rfo-github.workspace = true
+rfo-jobs.workspace = true
 rfo-sync.workspace = true
 rfo-context.workspace = true
 rfo-review.workspace = true
@@ -32,5 +33,9 @@ tracing-subscriber.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
 serde.workspace = true
-# tempfile is only needed for doctor tests
+# tempfile is used by doctor tests in src/ (behind #[cfg(test)])
 tempfile.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true

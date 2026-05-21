@@ -1,7 +1,10 @@
-//! Context pack generation for rfo.
+//! Context and cache for rfo.
 //!
-//! Produce context with local git status, GitHub metadata, CI status,
-//! recent failures, quality gates, important files, risk notes.
+//! Provides structured repo context for AI/MCP agents.
+//! Full context pack assembly is rfo-33.
 
 pub mod cache;
 pub mod pack;
+
+pub use cache::ContextCache;
+pub use pack::{ContextPack};

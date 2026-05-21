@@ -1,18 +1,9 @@
-//! Test utilities and fixtures for rfo.
+//! Test fixtures, fakes, and utilities for rfo.
 //!
-//! Provides:
-//! - In-memory SQLite databases for testing
-//! - Temporary repo fixtures
-//! - Fake providers
-//! - Assertion helpers
+//! Reusable test helpers across the workspace. Every test that touches
+//! the filesystem or state should use `tempfile::TempDir` via helpers here.
 
-pub mod fakes;
 pub mod fixtures;
+pub mod fakes;
 
-use anyhow::Result;
-use rusqlite::Connection;
-
-/// Create an in-memory SQLite database with migrations applied.
-pub fn test_db() -> Result<Connection> {
-    rfo_state::open_memory()
-}
+pub use fixtures::{git_repo, rust_project};

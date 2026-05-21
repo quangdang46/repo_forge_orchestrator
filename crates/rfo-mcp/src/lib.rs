@@ -1,12 +1,12 @@
-//! MCP server for rfo.
+//! MCP server integration for rfo.
 //!
-//! stdio transport via rmcp.
-//! Tools: rfo.status, rfo.inbox, rfo.health, rfo.context, rfo.review_plan,
-//!        rfo.job_status, rfo.run_timeline.
-//! Resources: rfo://repos, rfo://inbox, rfo://context/{owner}/{repo},
-//!            rfo://runs/{id}/timeline.
-//! Mutation tools create plans, never apply directly.
+//! Provides MCP tools, resources, and server entry point.
+//! Full stdio server implementation is rfo-34.
 
 pub mod resources;
 pub mod server;
 pub mod tools;
+
+pub use resources::{ResourceDef, list_resources};
+pub use server::{ServerCapabilities, default_capabilities, version};
+pub use tools::{ToolDef, list_tools};
