@@ -162,6 +162,11 @@ pub struct DoctorOptions {
     /// Override `PATH`-based binary discovery (for tests). When `None`, use the
     /// process environment.
     pub binary_lookup_path: Option<PathBuf>,
+    /// Override config/state/cache paths. When `None`, use [`ConfigPaths::discover`]
+    /// (which honors `XDG_*` env vars). Passing this lets `rfo --config-dir
+    /// ... --state-dir ... doctor` actually inspect the paths the user asked
+    /// about instead of always reporting on the default XDG location.
+    pub paths: Option<ConfigPaths>,
 }
 
 /// Run all checks and return a [`DoctorReport`].
@@ -176,14 +181,16 @@ pub fn run(opts: DoctorOptions) -> DoctorReport {
     checks.push(check_git());
     checks.push(check_github_auth(opts.config_token.as_deref()));
 
-    let paths = ConfigPaths::discover().unwrap_or_else(|_| {
-        // fallback to tmp dir for testability - in real usage this should not fail
-        let tmp = tempfile::tempdir().unwrap();
-        ConfigPaths {
-            config_dir: tmp.path().join(".config/rfo"),
-            state_dir: tmp.path().join(".local/state/rfo"),
-            cache_dir: tmp.path().join(".cache/rfo"),
-        }
+    let paths = opts.paths.clone().unwrap_or_else(|| {
+        ConfigPaths::discover().unwrap_or_else(|_| {
+            // fallback to tmp dir for testability - in real usage this should not fail
+            let tmp = tempfile::tempdir().unwrap();
+            ConfigPaths {
+                config_dir: tmp.path().join(".config/rfo"),
+                state_dir: tmp.path().join(".local/state/rfo"),
+                cache_dir: tmp.path().join(".cache/rfo"),
+            }
+        })
     });
 
     let (cfg_check, applied_fix_count) = check_and_optionally_fix_config(&paths, opts.fix);
@@ -558,6 +565,7 @@ mod tests {
             config_token: Some("ghp_test_token".into()),
             fix: true,
             binary_lookup_path: Some(tmp.path().to_path_buf()),
+            paths: Some(paths_in(&tmp)),
         };
         let report = run(opts);
         // git, github_auth, config, state, provider:claude, provider:codex

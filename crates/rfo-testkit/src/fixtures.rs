@@ -2,7 +2,6 @@
 //!
 //! Shared fixtures for tests across all crates.
 
-use std::path::Path;
 use tempfile::TempDir;
 
 /// Create a temporary directory with a minimal git repo initialized.

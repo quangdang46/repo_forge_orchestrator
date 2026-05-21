@@ -8,8 +8,13 @@
 pub mod migrate;
 pub mod queries;
 
+// Re-export rusqlite so downstream crates (rfo CLI, integration tests) can
+// name `rfo_state::Connection` without taking a direct rusqlite dependency
+// and risking a version mismatch with the one we link.
+pub use rusqlite;
+pub use rusqlite::Connection;
+
 use anyhow::{Context, Result};
-use rusqlite::Connection;
 use std::path::Path;
 
 /// Open (or create) the rfo state database with PRAGMAs and migrations applied.

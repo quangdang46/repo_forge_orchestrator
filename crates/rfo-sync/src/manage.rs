@@ -147,9 +147,41 @@ pub fn add(conn: &Connection, spec_str: &str, projects_dir: &Path) -> Result<Tra
 /// Remove a tracked repo by `owner/name` or alias. Returns the removed repo.
 pub fn remove(conn: &Connection, key: &str) -> Result<TrackedRepo> {
     let repo = find_repo(conn, key).context("repo not found")?;
-    conn.execute("DELETE FROM repos WHERE id = ?1", params![repo.id])
-        .context("deleting repo from state DB")?;
+    delete_repo_cascade(conn, &repo.id).context("deleting repo from state DB")?;
     Ok(repo)
+}
+
+/// Delete a repo and all rows in dependent tables that reference it.
+///
+/// SQLite enforces `PRAGMA foreign_keys=ON` (see `rfo_state::open_db`), so a
+/// plain `DELETE FROM repos` fails once `sync_results`, `repo_health_snapshots`,
+/// `context_cache`, `plans`, or `jobs` reference the repo. The schema does not
+/// declare `ON DELETE CASCADE`, so we emulate it here in a single transaction
+/// to keep `remove` / `prune` atomic.
+pub fn delete_repo_cascade(conn: &Connection, repo_id: &str) -> rusqlite::Result<()> {
+    // Tables with a NOT NULL FK to repos(id) — these would block the parent
+    // delete outright and must be cleared first.
+    const CHILD_TABLES: &[&str] = &["sync_results", "repo_health_snapshots", "context_cache"];
+    // Tables with a nullable FK to repos(id). We null them out so historical
+    // run/plan/job records survive a prune (audit-friendly) but no longer
+    // hold a reference to a row that's about to disappear.
+    const NULLABLE_FK_TABLES: &[&str] = &["jobs", "plans"];
+
+    let tx = conn.unchecked_transaction()?;
+    for table in CHILD_TABLES {
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE repo_id = ?1"),
+            params![repo_id],
+        )?;
+    }
+    for table in NULLABLE_FK_TABLES {
+        tx.execute(
+            &format!("UPDATE {table} SET repo_id = NULL WHERE repo_id = ?1"),
+            params![repo_id],
+        )?;
+    }
+    tx.execute("DELETE FROM repos WHERE id = ?1", params![repo_id])?;
+    tx.commit()
 }
 
 /// List all tracked repos, optionally filtered by owner prefix.
@@ -365,6 +397,43 @@ mod tests {
         let (_, conn) = setup();
         let err = remove(&conn, "nonexistent/repo").unwrap_err();
         assert!(err.to_string().contains("not found"));
+    }
+
+    /// Regression: a repo with sync_results / health_snapshots referencing
+    /// it must still be removable. Pre-fix `DELETE FROM repos` tripped
+    /// SQLite's FK enforcement.
+    #[test]
+    fn remove_clears_dependent_rows() {
+        let (tmp, conn) = setup();
+        let repo = add(&conn, "alice/proj1", &projects_dir(&tmp)).unwrap();
+
+        conn.execute(
+            "INSERT INTO runs (id, command, started_at, args_json) VALUES (?1, ?2, ?3, ?4)",
+            params!["run-1", "sync", 0i64, "[]"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sync_results (run_id, repo_id, action, status, duration_ms) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["run-1", repo.id, "clone", "success", 0i64],
+        )
+        .unwrap();
+        rfo_state::queries::score_repo_health(&conn, &repo.id).unwrap();
+
+        remove(&conn, &repo.id).unwrap();
+        assert!(list(&conn, None).unwrap().is_empty());
+
+        // Child rows are gone; the run record itself survives as audit history.
+        let remaining_sync: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_results", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining_sync, 0);
+        let remaining_health: i64 = conn
+            .query_row("SELECT COUNT(*) FROM repo_health_snapshots", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(remaining_health, 0);
     }
 
     #[test]
