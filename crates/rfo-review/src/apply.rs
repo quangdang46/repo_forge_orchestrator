@@ -84,7 +84,6 @@ fn now_secs() -> i64 {
 mod tests {
     use super::*;
     use crate::plan::{PlanInput, PlanStatus, create_plan, get_plan};
-    use tempfile::TempDir;
 
     fn setup() -> Connection {
         rfo_state::open_memory().unwrap()

@@ -230,7 +230,6 @@ fn now_secs() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
 
     fn setup() -> Connection {
         rfo_state::open_memory().unwrap()

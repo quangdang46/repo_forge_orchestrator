@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn prune_missing_removes_nonexistent_paths() {
         let (tmp, conn) = setup();
-        let repo = crate::manage::add(&conn, "alice/gone", &projects_dir(&tmp)).unwrap();
+        let _repo = crate::manage::add(&conn, "alice/gone", &projects_dir(&tmp)).unwrap();
         // Don't create the directory
         let results = prune_missing(&conn).unwrap();
         assert_eq!(results.len(), 1);
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn prune_missing_keeps_existing_paths() {
         let (tmp, conn) = setup();
-        let repo = crate::manage::add(&conn, "alice/present", &projects_dir(&tmp)).unwrap();
+        let _repo = crate::manage::add(&conn, "alice/present", &projects_dir(&tmp)).unwrap();
         // Create the local path
         let local = projects_dir(&tmp).join("alice").join("present");
         std::fs::create_dir_all(&local).unwrap();
