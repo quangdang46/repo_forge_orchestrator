@@ -4,10 +4,11 @@
 //! One small change per PR. Quality gates + secret scan required.
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// A discovered fixer for a repo.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Fixer {
     pub name: String,
     pub command: String,
@@ -15,7 +16,7 @@ pub struct Fixer {
 }
 
 /// A train plan for a single repo.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainPlan {
     pub repo_id: String,
     pub fixers: Vec<Fixer>,
@@ -94,7 +95,7 @@ pub fn run_train(repo_path: &Path, plan: &TrainPlan) -> Result<TrainResult> {
 }
 
 /// Result of running a train plan.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainResult {
     pub succeeded: Vec<String>,
     pub failed: Vec<(String, String)>,

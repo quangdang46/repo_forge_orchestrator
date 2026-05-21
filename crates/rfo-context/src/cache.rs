@@ -4,7 +4,6 @@
 
 use std::collections::HashMap;
 
-
 /// In-memory cache for context data.
 #[derive(Debug, Clone, Default)]
 pub struct ContextCache {

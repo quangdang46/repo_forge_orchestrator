@@ -8,9 +8,10 @@ use std::path::Path;
 use crate::denylist::Denylist;
 use crate::quality_gates;
 use crate::secret_scan::{self, SecretScanMode};
+use serde::{Deserialize, Serialize};
 
 /// Outcome of a sweep commit attempt.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CommitOutcome {
     Committed { message: String, oid: String },
     NothingToCommit,

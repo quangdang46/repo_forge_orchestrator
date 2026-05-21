@@ -9,9 +9,10 @@ use std::path::Path;
 use crate::denylist::Denylist;
 use crate::quality_gates;
 use crate::secret_scan::{self};
+use serde::{Deserialize, Serialize};
 
 /// Summary of an agent sweep attempt.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SweepSummary {
     pub repo_id: String,
     pub plan_created: bool,

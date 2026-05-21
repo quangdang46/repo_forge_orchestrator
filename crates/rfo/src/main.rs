@@ -42,6 +42,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    // ── Repo management ──────────────────────────────────────────────
     /// Initialize config + SQLite state directory
     Init,
 
@@ -73,14 +74,12 @@ enum Commands {
         file: PathBuf,
     },
 
+    // ── Sync / Status ────────────────────────────────────────────────
     /// Sync all tracked repos
     Sync {
         /// Sync strategy: ff-only (default), rebase, merge
         #[arg(long, value_enum, default_value_t = SyncStrategy::FfOnly)]
         strategy: SyncStrategy,
-        /// Max parallel jobs (default: num CPUs)
-        #[arg(long)]
-        jobs: Option<usize>,
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
@@ -88,7 +87,7 @@ enum Commands {
 
     /// Show status of tracked repos
     Status {
-        /// Specific repo key (owner/repo, alias, or id)
+        /// Specific repo key
         repo: Option<String>,
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
@@ -97,25 +96,163 @@ enum Commands {
 
     /// Prune removed/missing repos
     Prune {
-        /// Skip confirmation prompts
-        #[arg(long)]
-        force: bool,
         /// Also prune archived repos
         #[arg(long)]
         archived: bool,
-        /// Also prune missing repos (not on disk)
+        /// Also prune missing repos
         #[arg(long)]
         missing: bool,
     },
 
+    // ── Health / Inbox ───────────────────────────────────────────────
+    /// Show health score for repos
+    Health {
+        /// Specific repo key
+        repo: Option<String>,
+        /// Output format
+        #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+        format: OutputFormat,
+    },
+
+    /// Show inbox (items needing attention)
+    Inbox {
+        /// Output format
+        #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+        format: OutputFormat,
+    },
+
+    // ── Runs / Timeline ──────────────────────────────────────────────
+    /// Run management commands
+    Run {
+        #[command(subcommand)]
+        sub: RunCommands,
+    },
+
+    // ── Conflict ─────────────────────────────────────────────────────
+    /// Conflict resolver commands
+    Conflict {
+        #[command(subcommand)]
+        sub: ConflictCommands,
+    },
+
+    // ── Review ───────────────────────────────────────────────────────
+    /// Review plan/apply commands
+    Review {
+        #[command(subcommand)]
+        sub: ReviewCommands,
+    },
+
+    // ── Sweep ────────────────────────────────────────────────────────
+    /// Sweep commands (commit, agent)
+    Sweep {
+        #[command(subcommand)]
+        sub: SweepCommands,
+    },
+
+    // ── Train ────────────────────────────────────────────────────────
+    /// Tiny PR Train commands
+    Train {
+        #[command(subcommand)]
+        sub: TrainCommands,
+    },
+
+    // ── Doctor ───────────────────────────────────────────────────────
     /// Diagnose installation health
     Doctor {
-        /// Apply repairs (write default config, create state dir)
+        /// Apply repairs
         #[arg(long)]
         fix: bool,
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RunCommands {
+    /// List recent runs
+    List {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Show a specific run
+    Show { run_id: String },
+    /// Show timeline for a run
+    Timeline { run_id: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum ConflictCommands {
+    /// List conflicted repos
+    List,
+    /// Explain a conflict
+    Explain { repo: String },
+    /// Abort a conflict
+    Abort { repo: String },
+    /// Mark a conflict as resolved
+    MarkResolved { repo: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum ReviewCommands {
+    /// Create a review plan
+    Plan {
+        /// Repo key
+        repo: String,
+        /// Plan description
+        #[arg(long)]
+        summary: Option<String>,
+        /// Risk level: low, medium, high
+        #[arg(long)]
+        risk: Option<String>,
+    },
+    /// Apply a review plan
+    Apply { plan_id: String },
+    /// List plans
+    ListPlans,
+}
+
+#[derive(Debug, Subcommand)]
+enum SweepCommands {
+    /// Sweep commit with safety checks
+    Commit {
+        /// Repo path
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Commit message
+        #[arg(long)]
+        message: String,
+    },
+    /// Run sweep agent on a repo
+    Agent {
+        /// Repo path
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Repo id for tracking
+        #[arg(long)]
+        repo_id: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TrainCommands {
+    /// Plan a train run
+    Plan {
+        /// Repo path
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Repo id
+        #[arg(long)]
+        repo_id: Option<String>,
+    },
+    /// Execute a train run
+    Run {
+        /// Repo path
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Repo id
+        #[arg(long)]
+        repo_id: Option<String>,
     },
 }
 
@@ -151,6 +288,7 @@ fn run() -> Result<()> {
     let db_path = paths.state_db();
 
     match cli.command {
+        // ── Repo management ──
         Commands::Init => {
             let created = manage::init(&paths).context("initializing rfo")?;
             if created {
@@ -210,11 +348,8 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::Sync {
-            strategy,
-            jobs: _,
-            format,
-        } => {
+        // ── Sync / Status ──
+        Commands::Sync { strategy, format } => {
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
             let opts = sync::SyncOptions {
                 strategy,
@@ -264,14 +399,9 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::Prune {
-            force: _,
-            archived,
-            missing,
-        } => {
+        Commands::Prune { archived, missing } => {
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
             let mut pruned: Vec<prune::PruneResult> = Vec::new();
-
             if archived {
                 let results = prune::prune_archived(&conn)?;
                 pruned.extend(results);
@@ -280,7 +410,6 @@ fn run() -> Result<()> {
                 let results = prune::prune_missing(&conn)?;
                 pruned.extend(results);
             }
-
             if !pruned.is_empty() {
                 eprintln!("Pruned {} repos:", pruned.len());
                 for p in &pruned {
@@ -291,6 +420,201 @@ fn run() -> Result<()> {
             }
         }
 
+        // ── Health / Inbox ──
+        Commands::Health { repo, format } => {
+            let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+            let snapshots = match repo {
+                Some(key) => {
+                    let found = manage::find_repo(&conn, &key)?;
+                    vec![rfo_state::queries::score_repo_health(&conn, &found.id)?]
+                }
+                None => rfo_state::queries::score_all_health(&conn)?,
+            };
+            for snap in &snapshots {
+                match format {
+                    OutputFormat::Text => {
+                        println!(
+                            "{}: score={} class={}",
+                            snap.repo_id, snap.score, snap.class
+                        );
+                    }
+                    OutputFormat::Json => {
+                        println!("{}", serde_json::to_string(snap)?);
+                    }
+                }
+            }
+        }
+
+        Commands::Inbox { format } => {
+            let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+            let items = rfo_state::queries::compute_inbox(&conn)?;
+            if items.is_empty() {
+                eprintln!("Inbox is empty.");
+            }
+            for item in &items {
+                match format {
+                    OutputFormat::Text => {
+                        println!(
+                            "{}/{}: priority={} {}",
+                            item.owner, item.name, item.priority, item.reason
+                        );
+                    }
+                    OutputFormat::Json => {
+                        println!("{}", serde_json::to_string(item)?);
+                    }
+                }
+            }
+        }
+
+        // ── Runs / Timeline ──
+        Commands::Run { sub } => {
+            let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+            match sub {
+                RunCommands::List { limit } => {
+                    let runs = rfo_jobs::recent_runs(&conn, limit)?;
+                    for run in &runs {
+                        let status = if run.is_finished() {
+                            format!("exit={}", run.exit_code.unwrap_or(0))
+                        } else {
+                            "running".into()
+                        };
+                        println!("{} {} {} ({})", run.id, run.command, status, run.started_at);
+                    }
+                }
+                RunCommands::Show { run_id } => match rfo_jobs::get_run(&conn, &run_id)? {
+                    Some(run) => println!("{}", serde_json::to_string_pretty(&run)?),
+                    None => eprintln!("Run {run_id} not found."),
+                },
+                RunCommands::Timeline { run_id } => {
+                    let events = rfo_jobs::events_for_run(&conn, &run_id)?;
+                    if events.is_empty() {
+                        eprintln!("No events for run {run_id}.");
+                    }
+                    for ev in &events {
+                        println!("[{}] {}: {}", ev.level, ev.ts, ev.message);
+                    }
+                }
+            }
+        }
+
+        // ── Conflict ──
+        Commands::Conflict { sub } => {
+            let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+            match sub {
+                ConflictCommands::List => {
+                    let repos = manage::list(&conn, None)?;
+                    let paths: Vec<PathBuf> =
+                        repos.iter().map(|r| PathBuf::from(&r.local_path)).collect();
+                    let conflicts = rfo_git::conflict::list_conflicts(&paths);
+                    if conflicts.is_empty() {
+                        eprintln!("No conflicts.");
+                    }
+                    for (path, state) in &conflicts {
+                        let explanation = rfo_git::conflict::explain(state);
+                        println!("{}: {}", path.display(), explanation);
+                    }
+                }
+                ConflictCommands::Explain { repo } => {
+                    let found = manage::find_repo(&conn, &repo)?;
+                    let path = PathBuf::from(&found.local_path);
+                    if let Some(state) = rfo_git::conflict::detect(&path)? {
+                        println!("{}", rfo_git::conflict::explain(&state));
+                    } else {
+                        eprintln!("No conflict in {repo}.");
+                    }
+                }
+                ConflictCommands::Abort { repo } => {
+                    let found = manage::find_repo(&conn, &repo)?;
+                    let path = PathBuf::from(&found.local_path);
+                    rfo_git::conflict::abort(&path)?;
+                    eprintln!("Aborted conflict in {repo}.");
+                }
+                ConflictCommands::MarkResolved { repo } => {
+                    eprintln!("Marked {repo} as resolved.");
+                }
+            }
+        }
+
+        // ── Review ──
+        Commands::Review { sub } => {
+            let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+            match sub {
+                ReviewCommands::Plan {
+                    repo,
+                    summary,
+                    risk: _risk,
+                } => {
+                    let found = manage::find_repo(&conn, &repo)?;
+                    let input = rfo_review::plan::PlanInput {
+                        repo_id: Some(found.id.clone()),
+                        kind: "review".into(),
+                        plan_json: serde_json::json!({"summary": summary.unwrap_or_default()})
+                            .to_string(),
+                        risk_class: None,
+                        risk_reasons_json: None,
+                        rollback_json: None,
+                    };
+                    let plan = rfo_review::plan::create_plan(&conn, &input)?;
+                    eprintln!("Created plan {} for {}", plan.id, repo);
+                }
+                ReviewCommands::Apply { plan_id } => {
+                    let result = rfo_review::apply::apply_plan(&conn, &plan_id)?;
+                    eprintln!("Applied plan {}: {:?}", plan_id, result);
+                }
+                ReviewCommands::ListPlans => {
+                    let plans = rfo_review::plan::list_plans(&conn, None)?;
+                    for p in &plans {
+                        println!("{} {:?} {} {:?}", p.id, p.repo_id, p.kind, p.status);
+                    }
+                }
+            }
+        }
+
+        // ── Sweep ──
+        Commands::Sweep { sub } => match sub {
+            SweepCommands::Commit { path, message } => {
+                let result = rfo_sweep::commit::sweep_commit(&path, &message)?;
+                match result {
+                    rfo_sweep::commit::CommitOutcome::Committed { oid, .. } => {
+                        eprintln!("Committed: {oid}");
+                    }
+                    rfo_sweep::commit::CommitOutcome::NothingToCommit => {
+                        eprintln!("Nothing to commit.");
+                    }
+                    rfo_sweep::commit::CommitOutcome::BlockedByGates { failures } => {
+                        eprintln!("Blocked by gates: {:?}", failures);
+                    }
+                    rfo_sweep::commit::CommitOutcome::BlockedBySecrets { files } => {
+                        eprintln!("Blocked by secrets: {:?}", files);
+                    }
+                    rfo_sweep::commit::CommitOutcome::BlockedByDenylist { files } => {
+                        eprintln!("Blocked by denylist: {:?}", files);
+                    }
+                }
+            }
+            SweepCommands::Agent { path, repo_id } => {
+                let id = repo_id.as_deref().unwrap_or("unknown");
+                let summary = rfo_sweep::agent::sweep_repo(&path, id)?;
+                println!("{}", serde_json::to_string_pretty(&summary)?);
+            }
+        },
+
+        // ── Train ──
+        Commands::Train { sub } => match sub {
+            TrainCommands::Plan { path, repo_id } => {
+                let id = repo_id.as_deref().unwrap_or("unknown");
+                let plan = rfo_sweep::train::plan_train(&path, id);
+                println!("{}", serde_json::to_string_pretty(&plan)?);
+            }
+            TrainCommands::Run { path, repo_id } => {
+                let id = repo_id.as_deref().unwrap_or("unknown");
+                let plan = rfo_sweep::train::plan_train(&path, id);
+                let result = rfo_sweep::train::run_train(&path, &plan)?;
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
+        },
+
+        // ── Doctor ──
         Commands::Doctor { fix, format } => {
             let opts = doctor::DoctorOptions {
                 config_token: None,

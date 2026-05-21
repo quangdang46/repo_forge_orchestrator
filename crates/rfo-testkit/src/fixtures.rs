@@ -29,7 +29,11 @@ pub fn git_repo() -> TempDir {
 /// Create a temporary directory with a Cargo.toml for a Rust project.
 pub fn rust_project() -> TempDir {
     let tmp = git_repo();
-    std::fs::write(tmp.path().join("Cargo.toml"), b"[package]\nname = \"test\"\n").unwrap();
+    std::fs::write(
+        tmp.path().join("Cargo.toml"),
+        b"[package]\nname = \"test\"\n",
+    )
+    .unwrap();
     tmp
 }
 
