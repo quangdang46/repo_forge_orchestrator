@@ -22,7 +22,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use rfo_config::{ConfigPaths, loader::load_config, paths::default_config_toml};
-use rfo_github::auth::{discover_token, AuthToken};
+use rfo_github::auth::discover_token;
 use rfo_state::open_db;
 
 /// Outcome of a single doctor check.
@@ -261,7 +261,10 @@ fn check_and_optionally_fix_config(paths: &ConfigPaths, fix: bool) -> (CheckResu
                     "config",
                     Severity::Required,
                     format!("invalid config at {}: {e}", cfg_path.display()),
-                    format!("edit {} or delete it to regenerate defaults", cfg_path.display()),
+                    format!(
+                        "edit {} or delete it to regenerate defaults",
+                        cfg_path.display()
+                    ),
                 ),
                 0,
             ),
@@ -274,7 +277,12 @@ fn check_and_optionally_fix_config(paths: &ConfigPaths, fix: bool) -> (CheckResu
             cfg_path.display()
         );
         return (
-            CheckResult::warn("config", Severity::Required, "config not initialized", Some(hint)),
+            CheckResult::warn(
+                "config",
+                Severity::Required,
+                "config not initialized",
+                Some(hint),
+            ),
             0,
         );
     }
@@ -293,7 +301,10 @@ fn check_and_optionally_fix_config(paths: &ConfigPaths, fix: bool) -> (CheckResu
             CheckResult::fail(
                 "config",
                 Severity::Required,
-                format!("failed to write default config to {}: {e}", cfg_path.display()),
+                format!(
+                    "failed to write default config to {}: {e}",
+                    cfg_path.display()
+                ),
                 "check XDG_CONFIG_HOME permissions",
             ),
             0,

@@ -12,24 +12,15 @@ mod doctor;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
 enum Format {
+    #[default]
     Text,
     Json,
 }
 
-impl Default for Format {
-    fn default() -> Self {
-        Format::Text
-    }
-}
-
 #[derive(Debug, Parser)]
-#[command(
-    name = "rfo",
-    about = "GitHub-first repo orchestration CLI",
-    version
-)]
+#[command(name = "rfo", about = "GitHub-first repo orchestration CLI", version)]
 struct Args {
     #[command(subcommand)]
     command: Commands,
@@ -63,8 +54,8 @@ fn main() {
             match format {
                 Format::Text => println!("{}", doctor::render_text(&report)),
                 Format::Json => {
-                    let json = serde_json::to_string_pretty(&report)
-                        .unwrap_or_else(|_| "{}".into());
+                    let json =
+                        serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".into());
                     println!("{json}");
                 }
             }
