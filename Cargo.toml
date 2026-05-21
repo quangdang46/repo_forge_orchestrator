@@ -82,6 +82,36 @@ predicates       = "3.1"
 globset         = "0.4"
 serde_yaml      = "0.9"
 
+# cargo-dist release configuration.
+# Drives the `Release` GitHub Actions workflow (see `.github/workflows/release.yml`).
+# Update with `dist init` if cargo-dist is upgraded.
+[workspace.metadata.dist]
+# Pin the dist CLI version that workflows install. Keep in sync with
+# `DIST_VERSION` env in `.github/workflows/release.yml`.
+cargo-dist-version = "0.28.0"
+# We drive CI ourselves; let dist still know it targets GitHub Actions.
+ci = ["github"]
+# Installer flavors generated alongside the archives.
+installers = ["shell", "powershell"]
+# Release targets — must match the matrix in the release workflow.
+targets = [
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+# Archive layout per platform: tarballs on Unix, zip on Windows.
+unix-archive = ".tar.xz"
+windows-archive = ".zip"
+# SHA256 checksums for every artifact.
+checksum = "sha256"
+# Auto-generate release notes from the changelog / commits.
+pr-run-mode = "plan"
+# Publish only the `rfo` binary crate; ignore xtask + library crates.
+precise-builds = true
+allow-dirty = ["ci"]
+
 # Release profile — matches cargo-dist conventions.
 [profile.release]
 lto = "thin"

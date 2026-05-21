@@ -3041,11 +3041,14 @@ dependencies = [
  "rfo-jobs",
  "rfo-output",
  "rfo-state",
+ "rusqlite",
  "serde",
  "serde_json",
  "similar",
+ "tempfile",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3078,8 +3081,11 @@ dependencies = [
  "rfo-output",
  "rfo-provider",
  "rfo-state",
+ "rfo-sync",
+ "rusqlite",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tempfile",
  "tokio",
  "tracing",
@@ -3098,10 +3104,13 @@ dependencies = [
  "rfo-jobs",
  "rfo-output",
  "rfo-state",
+ "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

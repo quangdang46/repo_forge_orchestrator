@@ -23,3 +23,8 @@ serde_json.workspace = true
 tokio.workspace = true
 indicatif.workspace = true
 console.workspace = true
+rusqlite.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

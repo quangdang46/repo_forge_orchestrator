@@ -6,6 +6,7 @@
 pub mod agent;
 pub mod commit;
 pub mod denylist;
+pub mod policy_check;
 pub mod quality_gates;
 pub mod risk;
 pub mod secret_scan;

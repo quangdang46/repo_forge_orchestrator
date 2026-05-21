@@ -23,3 +23,8 @@ serde_json.workspace = true
 tokio.workspace = true
 similar.workspace = true
 comfy-table.workspace = true
+rusqlite.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

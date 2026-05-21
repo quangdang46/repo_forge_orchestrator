@@ -99,6 +99,29 @@ pub fn events_for_run(conn: &Connection, run_id: &str) -> Result<Vec<RunEvent>> 
     Ok(out)
 }
 
+/// List all events for a run, ordered by timestamp ascending.
+pub fn list_events(conn: &Connection, run_id: &str) -> Result<Vec<RunEvent>> {
+    events_for_run(conn, run_id)
+}
+
+/// Fetch the most recent `limit` events across all runs, newest first.
+pub fn recent_events(conn: &Connection, limit: usize) -> Result<Vec<RunEvent>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, run_id, ts, level, message, data_json
+             FROM run_events ORDER BY ts DESC, id DESC LIMIT ?1",
+        )
+        .context("preparing recent_events query")?;
+    let rows = stmt
+        .query_map(params![limit as i64], row_to_event)
+        .context("querying recent events")?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
 fn row_to_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunEvent> {
     let level: String = row.get(3)?;
     let level = level.parse::<EventLevel>().map_err(|e| {
@@ -124,4 +147,68 @@ fn now_secs() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rfo_state::open_memory;
+
+    fn db() -> Connection {
+        open_memory().expect("memory db")
+    }
+
+    fn make_run(conn: &Connection) -> String {
+        crate::run::open_run(conn, "test", &[]).unwrap().id
+    }
+
+    #[test]
+    fn list_events_returns_events_oldest_first() {
+        let c = db();
+        let run_id = make_run(&c);
+        append_event(&c, &run_id, EventLevel::Info, "first", None).unwrap();
+        append_event(&c, &run_id, EventLevel::Warn, "second", None).unwrap();
+        append_event(&c, &run_id, EventLevel::Error, "third", None).unwrap();
+        let events = list_events(&c, &run_id).unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].message, "first");
+        assert_eq!(events[1].message, "second");
+        assert_eq!(events[2].message, "third");
+    }
+
+    #[test]
+    fn list_events_empty_for_unknown_run() {
+        let c = db();
+        let events = list_events(&c, "no-such-run").unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn recent_events_returns_newest_first_across_runs() {
+        let c = db();
+        let r1 = make_run(&c);
+        let r2 = make_run(&c);
+        append_event(&c, &r1, EventLevel::Info, "r1-event", None).unwrap();
+        append_event(&c, &r2, EventLevel::Info, "r2-event", None).unwrap();
+        let events = recent_events(&c, 10).unwrap();
+        assert_eq!(events.len(), 2);
+        // r2-event was inserted last, so it should be first (newest)
+        assert_eq!(events[0].message, "r2-event");
+        assert_eq!(events[1].message, "r1-event");
+    }
+
+    #[test]
+    fn recent_events_respects_limit() {
+        let c = db();
+        let run_id = make_run(&c);
+        for i in 0..5 {
+            append_event(&c, &run_id, EventLevel::Info, &format!("evt-{i}"), None).unwrap();
+        }
+        let events = recent_events(&c, 3).unwrap();
+        assert_eq!(events.len(), 3);
+        // newest first: evt-4, evt-3, evt-2
+        assert_eq!(events[0].message, "evt-4");
+        assert_eq!(events[1].message, "evt-3");
+        assert_eq!(events[2].message, "evt-2");
+    }
 }

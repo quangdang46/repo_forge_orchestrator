@@ -1,0 +1,157 @@
+name: Release
+
+# Tag-driven release pipeline powered by `cargo-dist` (the `dist` CLI).
+# Triggered by pushing a SemVer-style tag, e.g. `v0.1.0`, `v1.2.3-rc.1`.
+#
+# Pipeline:
+#   plan    -> resolves the dist manifest for the tag.
+#   build   -> matrix build of release artifacts on each target host.
+#   release -> aggregates artifacts + SHA256 checksums into a GitHub Release.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Pin the dist CLI to a known-good version. Bump intentionally.
+  DIST_VERSION: 0.28.0
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dist
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            "https://github.com/axodotdev/cargo-dist/releases/download/v${DIST_VERSION}/cargo-dist-installer.sh" | sh
+      - name: dist plan
+        run: dist plan --tag="${GITHUB_REF_NAME}" --output-format=json > dist-manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-manifest
+          path: dist-manifest.json
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: plan
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: dist-${{ matrix.target }}
+
+      # musl static linking needs the musl C toolchain on Linux.
+      - name: Install musl tooling
+        if: contains(matrix.target, 'linux-musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools
+
+      - name: Install dist (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf \
+            "https://github.com/axodotdev/cargo-dist/releases/download/v${DIST_VERSION}/cargo-dist-installer.sh" | sh
+      - name: Install dist (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          irm "https://github.com/axodotdev/cargo-dist/releases/download/v$env:DIST_VERSION/cargo-dist-installer.ps1" | iex
+
+      - name: Build artifacts
+        shell: bash
+        run: dist build --tag="${GITHUB_REF_NAME}" --target=${{ matrix.target }} --artifacts=local
+
+      - name: Generate SHA256 checksums
+        shell: bash
+        working-directory: target/distrib
+        run: |
+          shopt -s nullglob
+          for f in *.tar.gz *.tar.xz *.tar.zst *.zip *.exe *.msi *.deb *.rpm; do
+            [ -f "$f" ] || continue
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$f" > "$f.sha256"
+            else
+              shasum -a 256 "$f" > "$f.sha256"
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: |
+            target/distrib/*.tar.gz
+            target/distrib/*.tar.xz
+            target/distrib/*.tar.zst
+            target/distrib/*.zip
+            target/distrib/*.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: dist-*
+          merge-multiple: true
+      - name: List artifacts
+        run: ls -la artifacts
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --generate-notes \
+            --verify-tag \
+            artifacts/*
