@@ -7,6 +7,8 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
+use crate::manage::delete_repo_cascade;
+
 /// Result of a prune operation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PruneResult {
@@ -27,12 +29,12 @@ pub fn prune_repo(conn: &Connection, repo_id: &str) -> Result<PruneResult> {
         )
         .with_context(|| format!("repo {repo_id} not found"))?;
 
-    let n = conn.execute("DELETE FROM repos WHERE id = ?1", params![repo_id])?;
+    delete_repo_cascade(conn, repo_id)?;
     Ok(PruneResult {
         repo_id: repo_id.to_string(),
         owner,
         name,
-        removed: n > 0,
+        removed: true,
         reason: "manual prune".into(),
     })
 }
@@ -53,7 +55,7 @@ pub fn prune_archived(conn: &Connection) -> Result<Vec<PruneResult>> {
         .collect();
 
     for (id, owner, name) in rows {
-        conn.execute("DELETE FROM repos WHERE id = ?1", params![id])?;
+        delete_repo_cascade(conn, &id)?;
         results.push(PruneResult {
             repo_id: id,
             owner,
@@ -83,7 +85,7 @@ pub fn prune_missing(conn: &Connection) -> Result<Vec<PruneResult>> {
 
     for (id, owner, name, local_path) in rows {
         if !std::path::Path::new(&local_path).exists() {
-            conn.execute("DELETE FROM repos WHERE id = ?1", params![id])?;
+            delete_repo_cascade(conn, &id)?;
             results.push(PruneResult {
                 repo_id: id,
                 owner,
@@ -178,5 +180,51 @@ mod tests {
 
         let results = prune_missing(&conn).unwrap();
         assert!(results.is_empty());
+    }
+
+    /// Regression: a repo with rows in dependent tables (sync_results,
+    /// repo_health_snapshots, etc.) must still be prunable. Pre-fix this
+    /// hit a SQLite `FOREIGN KEY constraint failed` (code 787).
+    #[test]
+    fn prune_repo_with_sync_history_succeeds() {
+        let (tmp, conn) = setup();
+        let repo = crate::manage::add(&conn, "alice/with-history", &projects_dir(&tmp)).unwrap();
+
+        // Insert a run + sync_result so FK enforcement bites.
+        conn.execute(
+            "INSERT INTO runs (id, command, started_at, args_json) VALUES (?1, ?2, ?3, ?4)",
+            params!["run-1", "sync", 0i64, "[]"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sync_results (run_id, repo_id, action, status, duration_ms) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["run-1", repo.id, "clone", "success", 0i64],
+        )
+        .unwrap();
+
+        // Health snapshot, plan, and job all reference the same repo.
+        rfo_state::queries::score_repo_health(&conn, &repo.id).unwrap();
+
+        let result = prune_repo(&conn, &repo.id).unwrap();
+        assert!(result.removed);
+        assert!(crate::manage::list(&conn, None).unwrap().is_empty());
+    }
+
+    /// Regression: archived prune must also tolerate FK history.
+    #[test]
+    fn prune_archived_with_sync_history_succeeds() {
+        let (tmp, conn) = setup();
+        let repo = crate::manage::add(&conn, "alice/old", &projects_dir(&tmp)).unwrap();
+        rfo_state::queries::score_repo_health(&conn, &repo.id).unwrap();
+        conn.execute(
+            "UPDATE repos SET archived = 1 WHERE id = ?1",
+            params![repo.id],
+        )
+        .unwrap();
+
+        let results = prune_archived(&conn).unwrap();
+        assert_eq!(results.len(), 1);
+        assert!(crate::manage::list(&conn, None).unwrap().is_empty());
     }
 }

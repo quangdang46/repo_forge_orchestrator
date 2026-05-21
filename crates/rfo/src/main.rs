@@ -206,8 +206,14 @@ enum ReviewCommands {
         #[arg(long)]
         risk: Option<String>,
     },
-    /// Apply a review plan
+    /// Approve a pending plan so it can be applied
+    Approve { plan_id: String },
+    /// Reject a pending or approved plan
+    Reject { plan_id: String },
+    /// Apply a previously-approved review plan
     Apply { plan_id: String },
+    /// Roll back a previously-applied plan
+    Rollback { plan_id: String },
     /// List plans
     ListPlans,
 }
@@ -254,6 +260,45 @@ enum TrainCommands {
         #[arg(long)]
         repo_id: Option<String>,
     },
+}
+
+/// Parse a `--risk` flag value into a [`rfo_review::plan::PlanRisk`].
+///
+/// Accepts case-insensitive `low` / `medium` / `high`. Rejecting unknown
+/// strings here keeps the (otherwise opaque) DB column from accumulating
+/// values that the risk classifier can't understand.
+fn parse_risk(s: &str) -> Result<rfo_review::plan::PlanRisk> {
+    match s.to_ascii_lowercase().as_str() {
+        "low" => Ok(rfo_review::plan::PlanRisk::Low),
+        "medium" | "med" => Ok(rfo_review::plan::PlanRisk::Medium),
+        "high" => Ok(rfo_review::plan::PlanRisk::High),
+        other => anyhow::bail!("unknown risk class {other:?} (expected low|medium|high)"),
+    }
+}
+
+/// Build a `repo.id -> "owner/name"` map for friendlier text rendering.
+///
+/// Used by commands like `sync` and `health` whose underlying results carry
+/// only the repo UUID. Returns an empty map on any DB error — callers fall
+/// back to the raw id, so missing labels never break the command.
+fn repo_labels_by_id(conn: &rfo_state::Connection) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    let Ok(mut stmt) = conn.prepare("SELECT id, owner, name FROM repos") else {
+        return map;
+    };
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    });
+    if let Ok(rows) = rows {
+        for r in rows.flatten() {
+            map.insert(r.0, format!("{}/{}", r.1, r.2));
+        }
+    }
+    map
 }
 
 fn resolve_paths(cli: &Cli) -> Result<ConfigPaths> {
@@ -356,11 +401,18 @@ fn run() -> Result<()> {
                 autostash: false,
                 timeout_secs: 30,
             };
+            // Snapshot repos before sync so we can render `owner/name` in the
+            // text output even if a row is later mutated/removed.
+            let repo_labels = repo_labels_by_id(&conn);
             let results = sync::sync_all(&conn, &opts).context("syncing repos")?;
             for r in &results {
                 match format {
                     OutputFormat::Text => {
-                        println!("{} action={} status={}", r.repo_id, r.action, r.status);
+                        let label = repo_labels
+                            .get(&r.repo_id)
+                            .cloned()
+                            .unwrap_or_else(|| r.repo_id.clone());
+                        println!("{} action={} status={}", label, r.action, r.status);
                     }
                     OutputFormat::Json => {
                         println!("{}", serde_json::to_string(r)?);
@@ -430,13 +482,15 @@ fn run() -> Result<()> {
                 }
                 None => rfo_state::queries::score_all_health(&conn)?,
             };
+            let repo_labels = repo_labels_by_id(&conn);
             for snap in &snapshots {
                 match format {
                     OutputFormat::Text => {
-                        println!(
-                            "{}: score={} class={}",
-                            snap.repo_id, snap.score, snap.class
-                        );
+                        let label = repo_labels
+                            .get(&snap.repo_id)
+                            .cloned()
+                            .unwrap_or_else(|| snap.repo_id.clone());
+                        println!("{}: score={} class={}", label, snap.score, snap.class);
                     }
                     OutputFormat::Json => {
                         println!("{}", serde_json::to_string(snap)?);
@@ -530,7 +584,16 @@ fn run() -> Result<()> {
                     eprintln!("Aborted conflict in {repo}.");
                 }
                 ConflictCommands::MarkResolved { repo } => {
-                    eprintln!("Marked {repo} as resolved.");
+                    let found = manage::find_repo(&conn, &repo)?;
+                    let path = PathBuf::from(&found.local_path);
+                    match rfo_git::conflict::verify_resolved(&path) {
+                        Ok(()) => {
+                            eprintln!("Marked {repo} as resolved.");
+                        }
+                        Err(e) => {
+                            anyhow::bail!("cannot mark {repo} resolved: {e}");
+                        }
+                    }
                 }
             }
         }
@@ -542,29 +605,49 @@ fn run() -> Result<()> {
                 ReviewCommands::Plan {
                     repo,
                     summary,
-                    risk: _risk,
+                    risk,
                 } => {
                     let found = manage::find_repo(&conn, &repo)?;
+                    let risk_class = match risk.as_deref() {
+                        Some(r) => Some(parse_risk(r)?),
+                        None => None,
+                    };
                     let input = rfo_review::plan::PlanInput {
                         repo_id: Some(found.id.clone()),
                         kind: "review".into(),
                         plan_json: serde_json::json!({"summary": summary.unwrap_or_default()})
                             .to_string(),
-                        risk_class: None,
+                        risk_class,
                         risk_reasons_json: None,
                         rollback_json: None,
                     };
                     let plan = rfo_review::plan::create_plan(&conn, &input)?;
                     eprintln!("Created plan {} for {}", plan.id, repo);
                 }
+                ReviewCommands::Approve { plan_id } => {
+                    rfo_review::plan::approve_plan(&conn, &plan_id)?;
+                    eprintln!("Approved plan {plan_id}.");
+                }
+                ReviewCommands::Reject { plan_id } => {
+                    rfo_review::plan::reject_plan(&conn, &plan_id)?;
+                    eprintln!("Rejected plan {plan_id}.");
+                }
                 ReviewCommands::Apply { plan_id } => {
                     let result = rfo_review::apply::apply_plan(&conn, &plan_id)?;
-                    eprintln!("Applied plan {}: {:?}", plan_id, result);
+                    eprintln!(
+                        "Applied plan {} (status={}, applied_at={})",
+                        result.plan_id, result.status, result.applied_at
+                    );
+                }
+                ReviewCommands::Rollback { plan_id } => {
+                    rfo_review::apply::rollback_plan(&conn, &plan_id)?;
+                    eprintln!("Rolled back plan {plan_id}.");
                 }
                 ReviewCommands::ListPlans => {
                     let plans = rfo_review::plan::list_plans(&conn, None)?;
                     for p in &plans {
-                        println!("{} {:?} {} {:?}", p.id, p.repo_id, p.kind, p.status);
+                        let repo_label = p.repo_id.as_deref().unwrap_or("-");
+                        println!("{} {} {} {}", p.id, repo_label, p.kind, p.status);
                     }
                 }
             }
@@ -620,6 +703,7 @@ fn run() -> Result<()> {
                 config_token: None,
                 fix,
                 binary_lookup_path: None,
+                paths: Some(paths.clone()),
             };
             let report = doctor::run(opts);
             match format {

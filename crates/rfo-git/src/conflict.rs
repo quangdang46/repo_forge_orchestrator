@@ -165,6 +165,101 @@ pub fn abort(repo_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Verifies that a previously-conflicted repo is now resolved.
+///
+/// Returns `Ok(())` if:
+///
+/// - no `MERGE_HEAD` / `REBASE_HEAD` / `CHERRY_PICK_HEAD` / `REVERT_HEAD` exists
+///   (i.e. the in-progress operation finished), AND
+/// - there are no unmerged index entries (`git diff --name-only --diff-filter=U`
+///   is empty), AND
+/// - no tracked file contains conflict markers (`<<<<<<<`).
+///
+/// Otherwise returns a `MarkResolvedError` describing what's still wrong, so
+/// `rfo conflict mark-resolved <repo>` can surface a precise message instead
+/// of silently claiming success.
+pub fn verify_resolved(repo_path: &Path) -> Result<(), MarkResolvedError> {
+    let git_dir = find_git_dir(repo_path).map_err(MarkResolvedError::NotARepo)?;
+    if let Some(op) = detect_op(&git_dir).map_err(MarkResolvedError::NotARepo)? {
+        return Err(MarkResolvedError::OperationStillInProgress(op));
+    }
+    let unmerged = list_conflicted_files(repo_path).map_err(MarkResolvedError::IndexQueryFailed)?;
+    if !unmerged.is_empty() {
+        return Err(MarkResolvedError::UnmergedEntries(
+            unmerged.into_iter().map(|f| f.path).collect(),
+        ));
+    }
+    let with_markers =
+        files_with_conflict_markers(repo_path).map_err(MarkResolvedError::IndexQueryFailed)?;
+    if !with_markers.is_empty() {
+        return Err(MarkResolvedError::ConflictMarkersRemain(with_markers));
+    }
+    Ok(())
+}
+
+/// Why `verify_resolved` rejected a repo.
+#[derive(Debug)]
+pub enum MarkResolvedError {
+    NotARepo(anyhow::Error),
+    IndexQueryFailed(anyhow::Error),
+    OperationStillInProgress(ConflictOp),
+    UnmergedEntries(Vec<String>),
+    ConflictMarkersRemain(Vec<String>),
+}
+
+impl std::fmt::Display for MarkResolvedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotARepo(e) => write!(f, "{e}"),
+            Self::IndexQueryFailed(e) => write!(f, "querying git index failed: {e}"),
+            Self::OperationStillInProgress(op) => write!(
+                f,
+                "{op} still in progress — run `git {op} --continue` or `rfo conflict abort <repo>`"
+            ),
+            Self::UnmergedEntries(paths) => write!(
+                f,
+                "{} unmerged index entr{} remaining: {}",
+                paths.len(),
+                if paths.len() == 1 { "y" } else { "ies" },
+                paths.join(", ")
+            ),
+            Self::ConflictMarkersRemain(paths) => write!(
+                f,
+                "conflict markers (`<<<<<<<`) still present in: {}",
+                paths.join(", ")
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MarkResolvedError {}
+
+/// List tracked files in the repo that still contain `<<<<<<<` conflict markers.
+fn files_with_conflict_markers(repo_path: &Path) -> Result<Vec<String>> {
+    let output = std::process::Command::new("git")
+        .args(["ls-files", "-z"])
+        .current_dir(repo_path)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("LC_ALL", "C")
+        .output()
+        .context("running git ls-files")?;
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for raw in output.stdout.split(|&b| b == 0) {
+        if raw.is_empty() {
+            continue;
+        }
+        let name = String::from_utf8_lossy(raw).into_owned();
+        let full = repo_path.join(&name);
+        if file_has_conflict_markers(&full) {
+            out.push(name);
+        }
+    }
+    Ok(out)
+}
+
 // --- internals ---
 
 fn find_git_dir(repo_path: &Path) -> Result<PathBuf> {
@@ -250,7 +345,23 @@ fn file_has_conflict_markers(path: &Path) -> bool {
         return false;
     }
     let text = String::from_utf8_lossy(&bytes);
-    text.contains("<<<<<<<")
+    // Require the full marker triple at line starts. This avoids flagging
+    // documentation, test fixtures, or source code that happens to mention
+    // `<<<<<<<` as a string literal — only real, unresolved git conflicts
+    // produce all three markers anchored at column 0 in the same file.
+    let mut saw_start = false;
+    let mut saw_sep_after_start = false;
+    for line in text.lines() {
+        if line.starts_with("<<<<<<<") || line == "<<<<<<<" {
+            saw_start = true;
+            saw_sep_after_start = false;
+        } else if saw_start && (line.starts_with("=======") || line == "=======") {
+            saw_sep_after_start = true;
+        } else if saw_sep_after_start && (line.starts_with(">>>>>>>") || line == ">>>>>>>") {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -396,5 +507,54 @@ mod tests {
         assert_eq!(ConflictOp::Rebase.to_string(), "rebase");
         assert_eq!(ConflictOp::CherryPick.to_string(), "cherry-pick");
         assert_eq!(ConflictOp::Revert.to_string(), "revert");
+    }
+
+    #[test]
+    fn verify_resolved_accepts_clean_repo() {
+        let tmp = TempDir::new().unwrap();
+        let p = init_repo(&tmp);
+        commit(&p, "a.txt", "hello");
+        verify_resolved(&p).expect("clean repo should verify");
+    }
+
+    #[test]
+    fn verify_resolved_rejects_repo_with_active_merge() {
+        let tmp = TempDir::new().unwrap();
+        let p = init_repo(&tmp);
+        commit(&p, "a.txt", "base");
+        run_git(&p, &["checkout", "-q", "-b", "feature"]);
+        commit(&p, "a.txt", "feature change");
+        run_git(&p, &["checkout", "-q", "main"]);
+        commit(&p, "a.txt", "main change");
+        let _ = std::process::Command::new("git")
+            .args(["merge", "feature"])
+            .current_dir(&p)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .output()
+            .unwrap();
+        let err = verify_resolved(&p).expect_err("should reject");
+        let msg = err.to_string();
+        // Either the operation flag is still around, or the index has unmerged
+        // entries — both are valid pre-resolution states.
+        assert!(
+            msg.contains("merge") || msg.contains("unmerged"),
+            "unexpected error: {msg}"
+        );
+    }
+
+    #[test]
+    fn verify_resolved_rejects_lingering_conflict_markers() {
+        let tmp = TempDir::new().unwrap();
+        let p = init_repo(&tmp);
+        commit(
+            &p,
+            "a.txt",
+            "ok\n<<<<<<< HEAD\nmine\n=======\ntheirs\n>>>>>>> feature\n",
+        );
+        let err = verify_resolved(&p).expect_err("should reject");
+        assert!(
+            err.to_string().contains("conflict markers"),
+            "unexpected error: {err}"
+        );
     }
 }
