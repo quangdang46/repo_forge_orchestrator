@@ -1,236 +1,140 @@
-<#
-.SYNOPSIS
-  rfo installer for Windows (PowerShell 5.1+).
+# install.ps1 — One-liner installer for rfo (Repo Forge Orchestrator) on Windows.
+#
+# Usage (pipe-safe — no [CmdletBinding]/param so iex works):
+#   irm "https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.ps1" | iex
+#
+# Environment knobs:
+#   $env:RFO_VERSION   Specific version tag (e.g. "v0.1.0").  Default: latest release
+#   $env:RFO_PREFIX    Install directory for rfo.exe.          Default: $env:LOCALAPPDATA\Programs\rfo
+#
+# Downloads the pre-built binary from GitHub Releases — no Rust toolchain
+# required.  Only needs PowerShell 5+ and internet access.
 
-.DESCRIPTION
-  Downloads the latest (or pinned) rfo release from GitHub, verifies its
-  SHA256, extracts it, and installs `rfo.exe` into a per-user directory.
-  Optionally adds the install directory to the user's PATH.
+& {
+    $ErrorActionPreference = 'Stop'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-.EXAMPLE
-  irm https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.ps1 | iex
+    $GH_REPO = 'quangdang46/repo_forge'
 
-.EXAMPLE
-  $env:RFO_VERSION = "v0.1.0"; irm https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.ps1 | iex
-
-.NOTES
-  Environment overrides:
-    RFO_VERSION       Tag to install (e.g. v0.1.0). Default: latest GitHub release.
-    RFO_INSTALL_DIR   Where rfo.exe is placed. Default: $env:LOCALAPPDATA\Programs\rfo.
-    RFO_NO_VERIFY     If "1", skip SHA256 verification (NOT recommended).
-    RFO_NO_MODIFY_PATH If "1", do not add the install directory to user PATH.
-#>
-
-[CmdletBinding()]
-param()
-
-# When piped through `iex`, $ErrorActionPreference defaults to Continue.
-# Make failures hard so we never silently install a broken binary.
-$ErrorActionPreference = 'Stop'
-$ProgressPreference    = 'SilentlyContinue'  # speeds up Invoke-WebRequest
-
-# ---------- config ----------
-$Repo           = 'quangdang46/repo_forge'
-$BinName        = 'rfo'
-$DefaultDir     = Join-Path $env:LOCALAPPDATA 'Programs\rfo'
-$Version        = if ($env:RFO_VERSION)        { $env:RFO_VERSION }        else { 'latest' }
-$InstallDir     = if ($env:RFO_INSTALL_DIR)    { $env:RFO_INSTALL_DIR }    else { $DefaultDir }
-$NoVerify       = $env:RFO_NO_VERIFY -eq '1'
-$NoModifyPath   = $env:RFO_NO_MODIFY_PATH -eq '1'
-
-# ---------- pretty output ----------
-function Write-Info  { param([string]$Msg) Write-Host "==> $Msg" -ForegroundColor Cyan }
-function Write-Ok    { param([string]$Msg) Write-Host " OK $Msg" -ForegroundColor Green }
-function Write-Warn2 { param([string]$Msg) Write-Host "  ! $Msg" -ForegroundColor Yellow }
-function Write-Err   { param([string]$Msg) Write-Host "  X $Msg" -ForegroundColor Red }
-
-# ---------- helpers ----------
-function Test-PowerShellVersion {
-    if ($PSVersionTable.PSVersion.Major -lt 5) {
-        throw "rfo installer requires PowerShell 5.1 or later (found $($PSVersionTable.PSVersion))."
+    function Write-Step([string]$Message) {
+        Write-Host "==> $Message" -ForegroundColor Green
     }
-}
 
-function Resolve-Target {
-    # rfo only ships x86_64-pc-windows-msvc for Windows today.
+    function Write-Warn([string]$Message) {
+        Write-Host "==> $Message" -ForegroundColor Yellow
+    }
+
+    function Fail([string]$Message) {
+        Write-Host "==> ERROR: $Message" -ForegroundColor Red
+        throw $Message
+    }
+
+    # ── Resolve version tag ──────────────────────────────────────────────
+    $tag = $env:RFO_VERSION
+    if (-not $tag) {
+        Write-Step 'resolving latest release ...'
+        try {
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$GH_REPO/releases/latest" -UseBasicParsing
+            $tag = $release.tag_name
+        } catch {
+            Fail "could not fetch latest release from GitHub: $_"
+        }
+    }
+    Write-Step "version: $tag"
+
+    # ── Resolve install prefix ───────────────────────────────────────────
+    $prefix = if ($env:RFO_PREFIX) { $env:RFO_PREFIX } else { Join-Path $env:LOCALAPPDATA 'Programs\rfo' }
+    if (-not (Test-Path $prefix)) {
+        New-Item -ItemType Directory -Path $prefix -Force | Out-Null
+    }
+
+    # ── Detect target triple ─────────────────────────────────────────────
     $arch = $env:PROCESSOR_ARCHITECTURE
     switch ($arch) {
-        'AMD64' { return 'x86_64-pc-windows-msvc' }
-        'ARM64' {
-            throw "Windows ARM64 is not yet a published target for rfo. " +
-                  "Track https://github.com/$Repo/issues for ARM64 support, or build from source."
-        }
-        default {
-            throw "Unsupported Windows architecture: $arch (expected AMD64)."
-        }
+        'AMD64' { $target = 'x86_64-pc-windows-msvc' }
+        'ARM64' { Fail "Windows ARM64 is not yet a published target for rfo. Build from source: cargo build --release" }
+        default { Fail "Unsupported Windows architecture: $arch (expected AMD64)." }
     }
-}
+    Write-Step "target: $target"
 
-function Resolve-Tag {
-    if ($Version -ne 'latest') {
-        if ($Version.StartsWith('v')) { return $Version } else { return "v$Version" }
-    }
+    # ── Build download URL ───────────────────────────────────────────────
+    $archiveName = "rfo-$target.zip"
+    $downloadUrl = "https://github.com/$GH_REPO/releases/download/$tag/$archiveName"
 
-    $api = "https://api.github.com/repos/$Repo/releases/latest"
+    Write-Step "downloading $downloadUrl ..."
+    $zipPath = Join-Path $env:TEMP $archiveName
     try {
-        $resp = Invoke-RestMethod -Uri $api -Method Get -UseBasicParsing -Headers @{
-            'User-Agent' = 'rfo-installer'
-            'Accept'     = 'application/vnd.github+json'
-        }
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing
     } catch {
-        throw "Could not query GitHub for latest release: $($_.Exception.Message). " +
-              "GitHub may be rate-limiting; pin a version with `$env:RFO_VERSION = 'v0.1.0'`."
+        Fail "download failed: $_`n  URL: $downloadUrl`n  Ensure a release for $tag exists with a Windows binary."
     }
 
-    if (-not $resp.tag_name) {
-        throw "GitHub API returned no tag_name for latest release of $Repo."
-    }
-
-    # Verify the release actually carries assets for this target. A tag-only
-    # release (CI still running or failed) will 404 on the artifact URL.
-    if ($resp.assets.Count -eq 0) {
-        throw "Release $($resp.tag_name) has no assets yet (CI may still be building). " +
-              "Wait a few minutes and retry, or build from source with: " +
-              "git clone https://github.com/$Repo && cd repo_forge && cargo build --release"
-    }
-
-    return $resp.tag_name
-}
-
-function Invoke-Download {
-    param(
-        [Parameter(Mandatory)] [string]$Url,
-        [Parameter(Mandatory)] [string]$Destination
-    )
+    # ── Verify SHA-256 if checksum file is available ─────────────────────
+    $sha256Url = "$downloadUrl.sha256"
     try {
-        # Force TLS 1.2 (Windows PowerShell 5.1 defaults to TLS 1.0 on older systems).
-        [Net.ServicePointManager]::SecurityProtocol =
-            [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing `
-            -Headers @{ 'User-Agent' = 'rfo-installer' } -ErrorAction Stop
+        $resp = Invoke-WebRequest -Uri $sha256Url -UseBasicParsing
+        # .Content may be a byte array or a string depending on PS version.
+        $raw = if ($resp.Content -is [byte[]]) {
+            [System.Text.Encoding]::UTF8.GetString($resp.Content)
+        } else {
+            $resp.Content
+        }
+        $expectedHash = $raw.Trim().Split(' ')[0].ToLower()
+        $actualHash   = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLower()
+        if ($actualHash -ne $expectedHash) {
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+            Fail "SHA-256 mismatch: expected $expectedHash, got $actualHash"
+        }
+        Write-Step 'SHA-256 checksum verified'
     } catch {
-        throw "Download failed: $Url`n  $($_.Exception.Message)`n" +
-              "  If you see 404, the release may not have this target's binary yet.`n" +
-              "  Build from source instead: cargo build --release"
-    }
-}
-
-function Add-ToUserPath {
-    param([Parameter(Mandatory)] [string]$Dir)
-
-    $current = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (-not $current) { $current = '' }
-
-    $parts = $current.Split(';', [StringSplitOptions]::RemoveEmptyEntries)
-    foreach ($p in $parts) {
-        if ([string]::Equals($p.TrimEnd('\'), $Dir.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) {
-            return $false  # already on PATH
-        }
+        Write-Warn 'SHA-256 checksum file not available — skipping verification'
     }
 
-    $new = if ($current) { "$current;$Dir" } else { $Dir }
-    [Environment]::SetEnvironmentVariable('Path', $new, 'User')
-    # Make this session see it too.
-    $env:Path = "$env:Path;$Dir"
-    return $true
-}
-
-# ---------- main ----------
-function Install-Rfo {
-    Test-PowerShellVersion
-
-    Write-Info "rfo installer"
-    Write-Info "repo:    https://github.com/$Repo"
-    Write-Info "user:    $env:USERNAME"
-
-    $target = Resolve-Target
-    Write-Info "target:  $target"
-
-    $tag = Resolve-Tag
-    Write-Info "version: $tag"
-
-    $archiveName  = "$BinName-$target.zip"
-    $archiveUrl   = "https://github.com/$Repo/releases/download/$tag/$archiveName"
-    $checksumUrl  = "$archiveUrl.sha256"
-
-    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("rfo-install-" + [Guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $tmp -Force | Out-Null
-
+    # ── Extract rfo.exe ──────────────────────────────────────────────────
+    Write-Step "extracting to $prefix ..."
+    $extractDir = Join-Path $env:TEMP "rfo-extract-$([guid]::NewGuid().ToString('N'))"
     try {
-        $archivePath  = Join-Path $tmp $archiveName
-        $checksumPath = "$archivePath.sha256"
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
 
-        Write-Info "downloading $archiveName"
-        Invoke-Download -Url $archiveUrl -Destination $archivePath
-        $size = (Get-Item $archivePath).Length
-        Write-Ok ("downloaded {0:N0} bytes" -f $size)
+        $exe = Get-ChildItem -Path $extractDir -Filter 'rfo.exe' -Recurse | Select-Object -First 1
+        if (-not $exe) { Fail 'rfo.exe not found inside the downloaded archive' }
 
-        if (-not $NoVerify) {
-            Write-Info "verifying SHA256"
-            try {
-                Invoke-Download -Url $checksumUrl -Destination $checksumPath
-            } catch {
-                throw "Failed to download checksum from $checksumUrl. " +
-                      "Set `$env:RFO_NO_VERIFY = '1'` to skip (not recommended)."
-            }
-            $expected = ((Get-Content $checksumPath -Raw) -split '\s+')[0].Trim().ToLowerInvariant()
-            $actual   = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($expected -ne $actual) {
-                throw "SHA256 mismatch!`n  expected: $expected`n  actual:   $actual"
-            }
-            Write-Ok "SHA256 verified"
-        } else {
-            Write-Warn2 "RFO_NO_VERIFY=1; skipping checksum"
-        }
-
-        Write-Info "extracting archive"
-        $extractDir = Join-Path $tmp 'extract'
-        New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-        Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
-
-        # cargo-dist layout: <bin>-<target>/<bin>.exe
-        $exe = Get-ChildItem -Path $extractDir -Recurse -Filter "$BinName.exe" -File `
-            | Select-Object -First 1
-        if (-not $exe) {
-            throw "Could not locate $BinName.exe inside $archiveName"
-        }
-
-        if (-not (Test-Path $InstallDir)) {
-            New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-        }
-        $dest = Join-Path $InstallDir "$BinName.exe"
-        Copy-Item -Path $exe.FullName -Destination $dest -Force
-        Write-Ok "installed: $dest"
-
-        # Sanity check
-        try {
-            $verLine = & $dest --version 2>$null | Select-Object -First 1
-            if ($verLine) { Write-Ok $verLine }
-        } catch {
-            Write-Warn2 "installed binary did not respond to --version (may still work)"
-        }
-
-        # PATH handling
-        if ($NoModifyPath) {
-            Write-Warn2 "RFO_NO_MODIFY_PATH=1; not modifying PATH"
-            Write-Warn2 "add manually: $InstallDir"
-        } else {
-            $added = Add-ToUserPath -Dir $InstallDir
-            if ($added) {
-                Write-Ok  "added $InstallDir to user PATH"
-                Write-Warn2 "open a new terminal for PATH changes to take effect"
-            } else {
-                Write-Ok "$InstallDir already on PATH"
-            }
-        }
-
-        Write-Ok "done. run: $BinName --help"
+        Copy-Item -Path $exe.FullName -Destination (Join-Path $prefix 'rfo.exe') -Force
+    } finally {
+        Remove-Item $zipPath      -Force -ErrorAction SilentlyContinue
+        Remove-Item $extractDir   -Recurse -Force -ErrorAction SilentlyContinue
     }
-    finally {
-        if (Test-Path $tmp) {
-            Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue
+
+    $bin = Join-Path $prefix 'rfo.exe'
+    if (-not (Test-Path $bin)) {
+        Fail "extraction finished but $bin is missing"
+    }
+    Write-Step "installed: $bin"
+
+    # ── Ensure PREFIX is on PATH ─────────────────────────────────────────
+    if (-not (Get-Command rfo -ErrorAction SilentlyContinue)) {
+        # Add to current session.
+        $env:Path = "$prefix;$env:Path"
+
+        # Persist for future sessions (User scope).
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($userPath -notlike "*$prefix*") {
+            [Environment]::SetEnvironmentVariable('Path', "$prefix;$userPath", 'User')
+            Write-Step "added $prefix to your User PATH (takes effect in new terminals)"
         }
     }
+
+    Write-Step 'running rfo version'
+    & $bin --version
+
+    Write-Host @'
+
+Next steps:
+  1. rfo init                 # initialize config & state
+  2. rfo doctor               # verify the install
+  3. rfo add owner/repo       # track a repository
+  4. rfo sync                 # sync all tracked repos
+
+Configuration lives at %LOCALAPPDATA%\rfo\config.toml (run `rfo init` first).
+'@
 }
-
-Install-Rfo
