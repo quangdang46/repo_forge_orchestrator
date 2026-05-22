@@ -11,18 +11,10 @@ pub fn config_dir() -> Option<PathBuf> {
 /// On Windows, falls back to `%LOCALAPPDATA%\rfo` since `dirs::state_dir()`
 /// returns `None`.
 pub fn state_dir() -> Option<PathBuf> {
-    dirs::state_dir()
-        .or_else(|| {
-            #[cfg(windows)]
-            {
-                dirs::data_local_dir()
-            }
-            #[cfg(not(windows))]
-            {
-                None
-            }
-        })
-        .map(|p| p.join("rfo"))
+    let base = dirs::state_dir();
+    #[cfg(windows)]
+    let base = base.or_else(dirs::data_local_dir);
+    base.map(|p| p.join("rfo"))
 }
 
 /// Return the cache directory: `$XDG_CACHE_HOME/rfo` or `~/.cache/rfo`.
