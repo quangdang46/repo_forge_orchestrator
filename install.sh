@@ -141,6 +141,20 @@ resolve_version() {
             err "GitHub may be rate-limiting; pin a version with RFO_VERSION=v0.1.0"
             exit 3
         fi
+
+        # Verify the release has assets; a tag-only release (CI still
+        # running or failed) will 404 on the actual artifact URL.
+        local assets
+        assets="$(http_get_stdout "$api" \
+            | sed -n 's/.*"assets"[[:space:]]*:[[:space:]]*\[\]/EMPTY/p' \
+            | head -n1)"
+        if [ "$assets" = "EMPTY" ]; then
+            err "release ${tag} has no assets yet (CI may still be building)"
+            err "wait a few minutes and retry, or build from source:"
+            err "  git clone https://github.com/${REPO} && cd repo_forge && cargo build --release"
+            exit 3
+        fi
+
         printf '%s' "$tag"
     else
         case "$VERSION" in

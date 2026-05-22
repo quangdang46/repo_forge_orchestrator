@@ -85,6 +85,15 @@ function Resolve-Tag {
     if (-not $resp.tag_name) {
         throw "GitHub API returned no tag_name for latest release of $Repo."
     }
+
+    # Verify the release actually carries assets for this target. A tag-only
+    # release (CI still running or failed) will 404 on the artifact URL.
+    if ($resp.assets.Count -eq 0) {
+        throw "Release $($resp.tag_name) has no assets yet (CI may still be building). " +
+              "Wait a few minutes and retry, or build from source with: " +
+              "git clone https://github.com/$Repo && cd repo_forge && cargo build --release"
+    }
+
     return $resp.tag_name
 }
 
@@ -100,7 +109,9 @@ function Invoke-Download {
         Invoke-WebRequest -Uri $Url -OutFile $Destination -UseBasicParsing `
             -Headers @{ 'User-Agent' = 'rfo-installer' } -ErrorAction Stop
     } catch {
-        throw "Download failed: $Url`n  $($_.Exception.Message)"
+        throw "Download failed: $Url`n  $($_.Exception.Message)`n" +
+              "  If you see 404, the release may not have this target's binary yet.`n" +
+              "  Build from source instead: cargo build --release"
     }
 }
 

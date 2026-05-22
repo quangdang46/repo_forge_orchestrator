@@ -86,6 +86,13 @@ fn xdg_subdir(
     if let Some(base) = fallback_dir() {
         return Ok(base.join(app_dir));
     }
+    // On Windows, `dirs::state_dir()` returns `None`. Fall back to
+    // `%LOCALAPPDATA%` (via `dirs::data_local_dir`) so we don't create
+    // Unix-style `.local/state` directories on Windows.
+    #[cfg(windows)]
+    if let Some(local) = dirs::data_local_dir() {
+        return Ok(local.join(app_dir));
+    }
     let home =
         dirs::home_dir().ok_or_else(|| anyhow!("cannot resolve home directory for {env_var}"))?;
     Ok(home.join(home_relative).join(app_dir))
@@ -93,8 +100,12 @@ fn xdg_subdir(
 
 /// Expand a leading `~` in a path string to the user's home directory.
 /// Leaves the path unchanged if it does not start with `~`.
+/// Handles both `~/path` and `~\path` (Windows).
 pub fn expand_tilde(input: &str) -> PathBuf {
-    if let Some(rest) = input.strip_prefix("~/") {
+    if let Some(rest) = input
+        .strip_prefix("~/")
+        .or_else(|| input.strip_prefix("~\\"))
+    {
         if let Some(home) = dirs::home_dir() {
             return home.join(rest);
         }
@@ -169,6 +180,13 @@ mod tests {
     #[test]
     fn expand_tilde_with_home() {
         let expanded = expand_tilde("~/projects");
+        assert!(expanded.to_string_lossy().ends_with("projects"));
+        assert!(!expanded.to_string_lossy().starts_with("~"));
+    }
+
+    #[test]
+    fn expand_tilde_backslash() {
+        let expanded = expand_tilde("~\\projects");
         assert!(expanded.to_string_lossy().ends_with("projects"));
         assert!(!expanded.to_string_lossy().starts_with("~"));
     }
