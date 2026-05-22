@@ -171,11 +171,36 @@ pub struct InboxItem {
     pub reason: String,
 }
 
+/// Mark an inbox item as done (dismissed). Idempotent.
+///
+/// Future `compute_inbox` calls will exclude this repo's inbox entry.
+pub fn mark_inbox_done(conn: &Connection, repo_id: &str) -> Result<()> {
+    let now = now_secs();
+    conn.execute(
+        "INSERT OR REPLACE INTO inbox_dismissed (repo_id, dismissed_at) VALUES (?1, ?2)",
+        params![repo_id, now],
+    )?;
+    Ok(())
+}
+
+/// Clear dismissals older than the given timestamp. Returns count cleared.
+pub fn purge_inbox_dismissals(conn: &Connection, older_than: i64) -> Result<usize> {
+    let n = conn.execute(
+        "DELETE FROM inbox_dismissed WHERE dismissed_at < ?1",
+        params![older_than],
+    )?;
+    Ok(n)
+}
+
 /// Compute inbox items for all repos.
 pub fn compute_inbox(conn: &Connection) -> Result<Vec<InboxItem>> {
     let mut items = Vec::new();
-    let mut stmt =
-        conn.prepare("SELECT id, owner, name, archived, disabled FROM repos ORDER BY owner, name")?;
+    let mut stmt = conn.prepare(
+        "SELECT r.id, r.owner, r.name, r.archived, r.disabled \
+         FROM repos r \
+         WHERE r.id NOT IN (SELECT repo_id FROM inbox_dismissed) \
+         ORDER BY r.owner, r.name",
+    )?;
     let rows: Vec<(String, String, String, bool, bool)> = stmt
         .query_map([], |row| {
             Ok((

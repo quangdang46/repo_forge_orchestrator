@@ -38,6 +38,12 @@ pub struct SyncOptions {
     pub strategy: SyncStrategy,
     pub autostash: bool,
     pub timeout_secs: u32,
+    /// Preview only; do not clone/pull.
+    pub dry_run: bool,
+    /// Only clone missing repos; skip pulling existing.
+    pub clone_only: bool,
+    /// Only pull existing repos; skip cloning missing.
+    pub pull_only: bool,
 }
 
 impl Default for SyncOptions {
@@ -46,6 +52,9 @@ impl Default for SyncOptions {
             strategy: SyncStrategy::FfOnly,
             autostash: false,
             timeout_secs: 30,
+            dry_run: false,
+            clone_only: false,
+            pull_only: false,
         }
     }
 }
@@ -78,7 +87,37 @@ pub fn sync_repo(
         None
     };
 
+    if opts.dry_run {
+        let action = if local.join(".git").exists() {
+            "would_pull"
+        } else {
+            "would_clone"
+        };
+        let duration = start.elapsed().as_millis() as u64;
+        return SyncResult {
+            repo_id: repo.id.clone(),
+            action: action.into(),
+            status: "dry_run".into(),
+            duration_ms: duration,
+            error: None,
+            pre_oid: pre_oid.clone(),
+            post_oid: pre_oid,
+        };
+    }
+
     if !local.join(".git").exists() {
+        if opts.pull_only {
+            let duration = start.elapsed().as_millis() as u64;
+            return SyncResult {
+                repo_id: repo.id.clone(),
+                action: "skipped_clone".into(),
+                status: "skipped".into(),
+                duration_ms: duration,
+                error: None,
+                pre_oid,
+                post_oid: None,
+            };
+        }
         // Clone
         let clone_opts = rfo_git::mutation::CloneOpts {
             branch: repo.branch.clone().or(repo.default_branch.clone()),
@@ -127,6 +166,18 @@ pub fn sync_repo(
             }
         }
     } else {
+        if opts.clone_only {
+            let duration = start.elapsed().as_millis() as u64;
+            return SyncResult {
+                repo_id: repo.id.clone(),
+                action: "skipped_pull".into(),
+                status: "skipped".into(),
+                duration_ms: duration,
+                error: None,
+                pre_oid: pre_oid.clone(),
+                post_oid: pre_oid,
+            };
+        }
         // Fetch + pull
         let fetch_opts = rfo_git::mutation::FetchOpts::default();
         if let Err(e) = rfo_git::mutation::fetch(local, &fetch_opts) {

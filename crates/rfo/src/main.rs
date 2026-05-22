@@ -25,6 +25,14 @@ enum OutputFormat {
     Json,
 }
 
+/// Auto-approve level for plan application.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum AutoApproveLevel {
+    #[default]
+    None,
+    Low,
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "rfo", about = "GitHub-first repo orchestration CLI", version, long_about = None)]
 struct Cli {
@@ -35,6 +43,18 @@ struct Cli {
     /// Override the state directory (default: $XDG_STATE_HOME/rfo)
     #[arg(long, global = true)]
     state_dir: Option<PathBuf>,
+
+    /// Suppress non-essential output
+    #[arg(long, short, global = true)]
+    quiet: bool,
+
+    /// Enable verbose output
+    #[arg(long, global = true)]
+    verbose: bool,
+
+    /// Never prompt for confirmation
+    #[arg(long, global = true)]
+    non_interactive: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -68,10 +88,22 @@ enum Commands {
         format: OutputFormat,
     },
 
-    /// Bulk import repos from a file (one "owner/repo" per line)
+    /// Bulk import repos from a file, GitHub stars, org, or user
     Import {
         /// Path to repos.list file
-        file: PathBuf,
+        file: Option<PathBuf>,
+        /// Import from your GitHub stars
+        #[arg(long)]
+        stars: bool,
+        /// Import from an organization
+        #[arg(long)]
+        org: Option<String>,
+        /// Import from a user's repos
+        #[arg(long)]
+        user: Option<String>,
+        /// Maximum repos to import
+        #[arg(long)]
+        limit: Option<usize>,
     },
 
     // ── Sync / Status ────────────────────────────────────────────────
@@ -83,6 +115,27 @@ enum Commands {
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
+        /// Preview changes without making them
+        #[arg(long)]
+        dry_run: bool,
+        /// Only clone missing repos, don't pull
+        #[arg(long)]
+        clone_only: bool,
+        /// Only pull existing repos, don't clone
+        #[arg(long)]
+        pull_only: bool,
+        /// Stash changes before pull, pop after
+        #[arg(long)]
+        autostash: bool,
+        /// Number of repos to sync concurrently
+        #[arg(long, short = 'j', default_value_t = 1)]
+        parallel: u32,
+        /// Network timeout in seconds
+        #[arg(long)]
+        timeout: Option<u32>,
+        /// Resume an interrupted sync
+        #[arg(long)]
+        resume: bool,
     },
 
     /// Show status of tracked repos
@@ -116,6 +169,8 @@ enum Commands {
 
     /// Show inbox (items needing attention)
     Inbox {
+        #[command(subcommand)]
+        sub: Option<InboxCommands>,
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
@@ -165,6 +220,46 @@ enum Commands {
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
+    },
+
+    // ── Config ───────────────────────────────────────────────────────
+    /// Show or set configuration values
+    Config {
+        #[command(subcommand)]
+        sub: Option<ConfigCommands>,
+    },
+
+    // ── Self-update ──────────────────────────────────────────────────
+    /// Update rfo to the latest version
+    SelfUpdate {
+        /// Only check for updates, don't install
+        #[arg(long)]
+        check: bool,
+    },
+
+    // ── Robot docs ───────────────────────────────────────────────────
+    /// Machine-readable CLI documentation (JSON)
+    RobotDocs {
+        /// Topic: commands, quickstart, examples, exit-codes, formats, schemas
+        topic: Option<String>,
+    },
+
+    // ── Fork ─────────────────────────────────────────────────────────
+    /// Fork management commands
+    Fork {
+        #[command(subcommand)]
+        sub: ForkCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum InboxCommands {
+    /// Get the next inbox item (safe to poll)
+    Next,
+    /// Mark an inbox item as done
+    Done {
+        /// Item id to mark as done
+        item_id: String,
     },
 }
 
@@ -229,7 +324,7 @@ enum SweepCommands {
         #[arg(long)]
         message: String,
     },
-    /// Run sweep agent on a repo
+    /// Run sweep agent on a repo (or multiple repos)
     Agent {
         /// Repo path
         #[arg(long, default_value = ".")]
@@ -237,6 +332,24 @@ enum SweepCommands {
         /// Repo id for tracking
         #[arg(long)]
         repo_id: Option<String>,
+        /// Target repos by pattern (e.g. "owner/*")
+        #[arg(long)]
+        repos: Option<String>,
+        /// Target repos by filter (e.g. "tag:needs-fmt", "health:<50")
+        #[arg(long)]
+        filter: Option<String>,
+        /// Target all managed repos
+        #[arg(long)]
+        all: bool,
+        /// Preview without changes
+        #[arg(long)]
+        dry_run: bool,
+        /// Auto-approve level: none (default), low
+        #[arg(long, value_enum, default_value_t = AutoApproveLevel::None)]
+        auto_approve: AutoApproveLevel,
+        /// NDJSON event stream output
+        #[arg(long)]
+        output: Option<String>,
     },
 }
 
@@ -259,14 +372,64 @@ enum TrainCommands {
         /// Repo id
         #[arg(long)]
         repo_id: Option<String>,
+        /// Target repos by pattern (e.g. "owner/*")
+        #[arg(long)]
+        repos: Option<String>,
+        /// Target repos by filter
+        #[arg(long)]
+        filter: Option<String>,
+        /// Target all managed repos
+        #[arg(long)]
+        all: bool,
+        /// Preview without changes
+        #[arg(long)]
+        dry_run: bool,
+        /// Auto-approve level: none (default), low
+        #[arg(long, value_enum, default_value_t = AutoApproveLevel::None)]
+        auto_approve: AutoApproveLevel,
+        /// NDJSON event stream output
+        #[arg(long)]
+        output: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigCommands {
+    /// Print all configuration values
+    Print,
+    /// Set a configuration value (KEY=VALUE)
+    Set {
+        /// KEY=VALUE pair
+        pair: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ForkCommands {
+    /// Show fork status for tracked repos
+    Status {
+        /// Specific repo key
+        repo: Option<String>,
+        /// Output format
+        #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+        format: OutputFormat,
+    },
+    /// Sync forks with upstream
+    Sync {
+        /// Specific repo key
+        repo: Option<String>,
+    },
+    /// Clean up stale fork branches
+    Clean {
+        /// Specific repo key
+        repo: Option<String>,
+        /// Preview only
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
 /// Parse a `--risk` flag value into a [`rfo_review::plan::PlanRisk`].
-///
-/// Accepts case-insensitive `low` / `medium` / `high`. Rejecting unknown
-/// strings here keeps the (otherwise opaque) DB column from accumulating
-/// values that the risk classifier can't understand.
 fn parse_risk(s: &str) -> Result<rfo_review::plan::PlanRisk> {
     match s.to_ascii_lowercase().as_str() {
         "low" => Ok(rfo_review::plan::PlanRisk::Low),
@@ -277,10 +440,6 @@ fn parse_risk(s: &str) -> Result<rfo_review::plan::PlanRisk> {
 }
 
 /// Build a `repo.id -> "owner/name"` map for friendlier text rendering.
-///
-/// Used by commands like `sync` and `health` whose underlying results carry
-/// only the repo UUID. Returns an empty map on any DB error — callers fall
-/// back to the raw id, so missing labels never break the command.
 fn repo_labels_by_id(conn: &rfo_state::Connection) -> std::collections::HashMap<String, String> {
     let mut map = std::collections::HashMap::new();
     let Ok(mut stmt) = conn.prepare("SELECT id, owner, name FROM repos") else {
@@ -320,6 +479,137 @@ fn main() {
         eprintln!("error: {err:?}");
         std::process::exit(1);
     }
+}
+
+fn generate_robot_docs(topic: Option<&str>) -> serde_json::Value {
+    match topic {
+        Some("commands") => serde_json::json!({
+            "commands": [
+                {"name": "init", "description": "Initialize config + SQLite state directory"},
+                {"name": "add", "description": "Add a repo to tracking", "args": ["<spec>"]},
+                {"name": "remove", "description": "Remove a repo from tracking", "args": ["<key>"]},
+                {"name": "list", "description": "List tracked repos", "flags": ["--owner", "--format"]},
+                {"name": "import", "description": "Import repos from file, stars, org, or user", "flags": ["--stars", "--org", "--user", "--limit"]},
+                {"name": "sync", "description": "Sync all tracked repos", "flags": ["--strategy", "--dry-run", "--clone-only", "--pull-only", "--autostash", "--parallel", "--timeout", "--resume"]},
+                {"name": "status", "description": "Show status of tracked repos", "args": ["[repo]"]},
+                {"name": "prune", "description": "Prune removed/missing repos", "flags": ["--archived", "--missing"]},
+                {"name": "health", "description": "Show health score for repos", "args": ["[repo]"]},
+                {"name": "inbox", "description": "Show inbox items", "subcommands": ["next", "done"]},
+                {"name": "run", "description": "Run management", "subcommands": ["list", "show", "timeline"]},
+                {"name": "conflict", "description": "Conflict resolver", "subcommands": ["list", "explain", "abort", "mark-resolved"]},
+                {"name": "review", "description": "Review plan/apply", "subcommands": ["plan", "approve", "reject", "apply", "rollback", "list-plans"]},
+                {"name": "sweep", "description": "Sweep commands", "subcommands": ["commit", "agent"]},
+                {"name": "train", "description": "Tiny PR Train", "subcommands": ["plan", "run"]},
+                {"name": "doctor", "description": "Diagnose installation health", "flags": ["--fix"]},
+                {"name": "config", "description": "Show or set config", "subcommands": ["print", "set"]},
+                {"name": "self-update", "description": "Update rfo to latest version", "flags": ["--check"]},
+                {"name": "robot-docs", "description": "Machine-readable CLI documentation"},
+                {"name": "fork", "description": "Fork management", "subcommands": ["status", "sync", "clean"]},
+            ]
+        }),
+        Some("exit-codes") => serde_json::json!({
+            "exit_codes": [
+                {"code": 0, "meaning": "success"},
+                {"code": 1, "meaning": "one or more failures"},
+                {"code": 64, "meaning": "usage error"},
+            ]
+        }),
+        Some("formats") => serde_json::json!({
+            "formats": [
+                {"name": "text", "description": "Human-readable terminal output (default)"},
+                {"name": "json", "description": "One JSON document per line (NDJSON-friendly)"},
+            ]
+        }),
+        Some("quickstart") => serde_json::json!({
+            "steps": [
+                "rfo init",
+                "rfo add owner/repo",
+                "rfo sync",
+                "rfo status",
+                "rfo health",
+                "rfo inbox",
+            ]
+        }),
+        Some("examples") => serde_json::json!({
+            "examples": [
+                {"description": "Daily check-in", "commands": ["rfo sync", "rfo inbox", "rfo status"]},
+                {"description": "Review a change", "commands": ["rfo review plan owner/repo --summary 'Bump deps' --risk medium", "rfo review list-plans", "rfo review apply <plan-id>"]},
+                {"description": "Deterministic cleanup", "commands": ["rfo train plan --path ./repo", "rfo train run --path ./repo"]},
+                {"description": "Safe commit", "commands": ["rfo sweep commit --path . --message 'chore: format'"]},
+            ]
+        }),
+        Some("schemas") => serde_json::json!({
+            "schemas": {
+                "sync_result": {"repo_id": "string", "action": "string", "status": "string", "duration_ms": "u64", "error": "string|null"},
+                "health_snapshot": {"id": "string", "repo_id": "string", "score": "i64", "class": "string"},
+                "inbox_item": {"repo_id": "string", "owner": "string", "name": "string", "priority": "i64", "reason": "string"},
+            }
+        }),
+        _ => serde_json::json!({
+            "topics": ["commands", "quickstart", "examples", "exit-codes", "formats", "schemas"],
+            "usage": "rfo robot-docs <topic>"
+        }),
+    }
+}
+
+/// Resolve multi-repo targets from --repos/--filter/--all flags.
+fn resolve_multi_repo_targets(
+    conn: &rfo_state::Connection,
+    repos_pattern: Option<&str>,
+    filter: Option<&str>,
+    all: bool,
+    paths: &ConfigPaths,
+) -> Result<Vec<(String, PathBuf)>> {
+    use rfo_sync::manage;
+
+    if !all && repos_pattern.is_none() && filter.is_none() {
+        return Ok(Vec::new());
+    }
+
+    let tracked = manage::list(conn, None)?;
+    let mut targets: Vec<(String, PathBuf)> = Vec::new();
+
+    for repo in &tracked {
+        let label = format!("{}/{}", repo.owner, repo.name);
+        let matches = if all {
+            true
+        } else if let Some(pattern) = repos_pattern {
+            let glob =
+                globset::Glob::new(pattern).unwrap_or_else(|_| globset::Glob::new("*").unwrap());
+            let matcher = glob.compile_matcher();
+            matcher.is_match(&label)
+        } else if let Some(filt) = filter {
+            if let Some(rest) = filt.strip_prefix("health:<") {
+                if let Ok(threshold) = rest.parse::<i64>() {
+                    let snap = rfo_state::queries::score_repo_health(conn, &repo.id).ok();
+                    snap.is_some_and(|s| s.score < threshold)
+                } else {
+                    false
+                }
+            } else if let Some(rest) = filt.strip_prefix("tag:") {
+                label.contains(rest)
+            } else {
+                filt.starts_with("has:")
+            }
+        } else {
+            false
+        };
+
+        if matches {
+            let local = if repo.local_path.is_empty() {
+                paths
+                    .state_dir
+                    .join("projects")
+                    .join(&repo.owner)
+                    .join(&repo.name)
+            } else {
+                PathBuf::from(&repo.local_path)
+            };
+            targets.push((repo.id.clone(), local));
+        }
+    }
+
+    Ok(targets)
 }
 
 fn run() -> Result<()> {
@@ -375,34 +665,78 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::Import { file } => {
+        Commands::Import {
+            file,
+            stars,
+            org,
+            user,
+            limit,
+        } => {
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
             let projects_dir = paths.state_dir.join("projects");
-            let (added, skipped, errors) =
-                manage::import(&conn, &file, &projects_dir).context("importing repos")?;
-            if !added.is_empty() {
-                eprintln!("Added {} repos", added.len());
-            }
-            if !skipped.is_empty() {
-                eprintln!("Skipped {} duplicates", skipped.len());
-            }
-            if !errors.is_empty() {
-                for (line, err) in &errors {
-                    eprintln!("Error: {line}: {err}");
+            if let Some(file) = file {
+                let (added, skipped, errors) =
+                    manage::import(&conn, &file, &projects_dir).context("importing repos")?;
+                if !added.is_empty() {
+                    eprintln!("Added {} repos", added.len());
                 }
+                if !skipped.is_empty() {
+                    eprintln!("Skipped {} duplicates", skipped.len());
+                }
+                if !errors.is_empty() {
+                    for (line, err) in &errors {
+                        eprintln!("Error: {line}: {err}");
+                    }
+                }
+            } else if stars || org.is_some() || user.is_some() {
+                let specs = rfo_github::import::fetch_import_specs(
+                    stars,
+                    org.as_deref(),
+                    user.as_deref(),
+                    limit,
+                )?;
+                let mut added_count = 0u32;
+                let mut skip_count = 0u32;
+                for spec in &specs {
+                    match manage::add(&conn, spec, &projects_dir) {
+                        Ok(repo) => {
+                            if !cli.quiet {
+                                eprintln!("Added: {}/{}", repo.owner, repo.name);
+                            }
+                            added_count += 1;
+                        }
+                        Err(_) => {
+                            skip_count += 1;
+                        }
+                    }
+                }
+                eprintln!("Imported {added_count} repos, skipped {skip_count} duplicates");
+            } else {
+                anyhow::bail!("provide a file path, --stars, --org, or --user");
             }
         }
 
         // ── Sync / Status ──
-        Commands::Sync { strategy, format } => {
+        Commands::Sync {
+            strategy,
+            format,
+            dry_run,
+            clone_only,
+            pull_only,
+            autostash,
+            parallel: _,
+            timeout,
+            resume: _,
+        } => {
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
             let opts = sync::SyncOptions {
                 strategy,
-                autostash: false,
-                timeout_secs: 30,
+                autostash,
+                timeout_secs: timeout.unwrap_or(30),
+                dry_run,
+                clone_only,
+                pull_only,
             };
-            // Snapshot repos before sync so we can render `owner/name` in the
-            // text output even if a row is later mutated/removed.
             let repo_labels = repo_labels_by_id(&conn);
             let results = sync::sync_all(&conn, &opts).context("syncing repos")?;
             for r in &results {
@@ -499,22 +833,46 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::Inbox { format } => {
+        Commands::Inbox { sub, format } => {
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
-            let items = rfo_state::queries::compute_inbox(&conn)?;
-            if items.is_empty() {
-                eprintln!("Inbox is empty.");
-            }
-            for item in &items {
-                match format {
-                    OutputFormat::Text => {
-                        println!(
-                            "{}/{}: priority={} {}",
-                            item.owner, item.name, item.priority, item.reason
-                        );
+            match sub {
+                Some(InboxCommands::Next) => {
+                    let items = rfo_state::queries::compute_inbox(&conn)?;
+                    if let Some(item) = items.into_iter().next() {
+                        let json = serde_json::json!({
+                            "id": format!("inbox-{}", item.repo_id),
+                            "repo": format!("{}/{}", item.owner, item.name),
+                            "priority": item.priority,
+                            "reason": item.reason,
+                            "suggested_action": format!("rfo health {}/{}", item.owner, item.name),
+                        });
+                        println!("{}", serde_json::to_string(&json)?);
+                    } else {
+                        println!("{{}}");
                     }
-                    OutputFormat::Json => {
-                        println!("{}", serde_json::to_string(item)?);
+                }
+                Some(InboxCommands::Done { item_id }) => {
+                    let repo_id = item_id.strip_prefix("inbox-").unwrap_or(&item_id);
+                    rfo_state::queries::mark_inbox_done(&conn, repo_id)?;
+                    eprintln!("Marked {item_id} as done.");
+                }
+                None => {
+                    let items = rfo_state::queries::compute_inbox(&conn)?;
+                    if items.is_empty() {
+                        eprintln!("Inbox is empty.");
+                    }
+                    for item in &items {
+                        match format {
+                            OutputFormat::Text => {
+                                println!(
+                                    "{}/{}: priority={} {}",
+                                    item.owner, item.name, item.priority, item.reason
+                                );
+                            }
+                            OutputFormat::Json => {
+                                println!("{}", serde_json::to_string(item)?);
+                            }
+                        }
                     }
                 }
             }
@@ -675,10 +1033,105 @@ fn run() -> Result<()> {
                     }
                 }
             }
-            SweepCommands::Agent { path, repo_id } => {
-                let id = repo_id.as_deref().unwrap_or("unknown");
-                let summary = rfo_sweep::agent::sweep_repo(&path, id)?;
-                println!("{}", serde_json::to_string_pretty(&summary)?);
+            SweepCommands::Agent {
+                path,
+                repo_id,
+                repos,
+                filter,
+                all,
+                dry_run,
+                auto_approve,
+                output,
+            } => {
+                let use_ndjson = output.as_deref() == Some("json");
+
+                if repos.is_some() || filter.is_some() || all {
+                    let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+                    let targets = resolve_multi_repo_targets(
+                        &conn,
+                        repos.as_deref(),
+                        filter.as_deref(),
+                        all,
+                        &paths,
+                    )?;
+                    if use_ndjson {
+                        let event = rfo_output::ndjson::NdjsonEvent::batch_start(
+                            targets.len() as u32,
+                            "sweep-agent",
+                            dry_run,
+                        );
+                        println!("{}", serde_json::to_string(&event)?);
+                    }
+                    let mut applied = 0u32;
+                    let mut skipped = 0u32;
+                    let mut failed = 0u32;
+                    for (rid, repo_path) in &targets {
+                        if use_ndjson {
+                            let event = rfo_output::ndjson::NdjsonEvent::repo_start(rid);
+                            println!("{}", serde_json::to_string(&event)?);
+                        }
+                        if dry_run {
+                            eprintln!("[dry-run] would sweep {rid}");
+                            skipped += 1;
+                            if use_ndjson {
+                                let event =
+                                    rfo_output::ndjson::NdjsonEvent::repo_done(rid, "skipped");
+                                println!("{}", serde_json::to_string(&event)?);
+                            }
+                            continue;
+                        }
+                        let summary = rfo_sweep::agent::sweep_repo(repo_path, rid)?;
+                        if summary.plan_created {
+                            if use_ndjson {
+                                let event =
+                                    rfo_output::ndjson::NdjsonEvent::gates_passed(rid, "plan");
+                                println!("{}", serde_json::to_string(&event)?);
+                            }
+                            if matches!(auto_approve, AutoApproveLevel::Low) && summary.gates_passed
+                            {
+                                applied += 1;
+                                if use_ndjson {
+                                    let event =
+                                        rfo_output::ndjson::NdjsonEvent::repo_done(rid, "ok");
+                                    println!("{}", serde_json::to_string(&event)?);
+                                }
+                            } else {
+                                skipped += 1;
+                                if use_ndjson {
+                                    let event = rfo_output::ndjson::NdjsonEvent::repo_done(
+                                        rid,
+                                        "needs-approval",
+                                    );
+                                    println!("{}", serde_json::to_string(&event)?);
+                                }
+                            }
+                        } else {
+                            failed += 1;
+                            if use_ndjson {
+                                let reason = summary.error.as_deref().unwrap_or("gates failed");
+                                let event =
+                                    rfo_output::ndjson::NdjsonEvent::gates_failed(rid, reason);
+                                println!("{}", serde_json::to_string(&event)?);
+                                let event =
+                                    rfo_output::ndjson::NdjsonEvent::repo_done(rid, "failed");
+                                println!("{}", serde_json::to_string(&event)?);
+                            }
+                        }
+                    }
+                    if use_ndjson {
+                        let event =
+                            rfo_output::ndjson::NdjsonEvent::batch_done(applied, skipped, failed);
+                        println!("{}", serde_json::to_string(&event)?);
+                    } else {
+                        eprintln!(
+                            "Sweep complete: {applied} applied, {skipped} skipped, {failed} failed"
+                        );
+                    }
+                } else {
+                    let id = repo_id.as_deref().unwrap_or("unknown");
+                    let summary = rfo_sweep::agent::sweep_repo(&path, id)?;
+                    println!("{}", serde_json::to_string_pretty(&summary)?);
+                }
             }
         },
 
@@ -689,11 +1142,112 @@ fn run() -> Result<()> {
                 let plan = rfo_sweep::train::plan_train(&path, id);
                 println!("{}", serde_json::to_string_pretty(&plan)?);
             }
-            TrainCommands::Run { path, repo_id } => {
-                let id = repo_id.as_deref().unwrap_or("unknown");
-                let plan = rfo_sweep::train::plan_train(&path, id);
-                let result = rfo_sweep::train::run_train(&path, &plan)?;
-                println!("{}", serde_json::to_string_pretty(&result)?);
+            TrainCommands::Run {
+                path,
+                repo_id,
+                repos,
+                filter,
+                all,
+                dry_run,
+                auto_approve,
+                output,
+            } => {
+                let use_ndjson = output.as_deref() == Some("json");
+
+                if repos.is_some() || filter.is_some() || all {
+                    let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+                    let targets = resolve_multi_repo_targets(
+                        &conn,
+                        repos.as_deref(),
+                        filter.as_deref(),
+                        all,
+                        &paths,
+                    )?;
+                    if use_ndjson {
+                        let event = rfo_output::ndjson::NdjsonEvent::batch_start(
+                            targets.len() as u32,
+                            "train",
+                            dry_run,
+                        );
+                        println!("{}", serde_json::to_string(&event)?);
+                    }
+                    let mut applied = 0u32;
+                    let mut skipped = 0u32;
+                    let mut failed = 0u32;
+                    for (rid, repo_path) in &targets {
+                        if use_ndjson {
+                            let event = rfo_output::ndjson::NdjsonEvent::repo_start(rid);
+                            println!("{}", serde_json::to_string(&event)?);
+                        }
+                        if dry_run {
+                            let plan = rfo_sweep::train::plan_train(repo_path, rid);
+                            eprintln!("[dry-run] {rid}: {} fixers", plan.fixers.len());
+                            skipped += 1;
+                            if use_ndjson {
+                                let event =
+                                    rfo_output::ndjson::NdjsonEvent::repo_done(rid, "skipped");
+                                println!("{}", serde_json::to_string(&event)?);
+                            }
+                            continue;
+                        }
+                        let plan = rfo_sweep::train::plan_train(repo_path, rid);
+                        if use_ndjson {
+                            let event = rfo_output::ndjson::NdjsonEvent::plan_created(
+                                rid,
+                                "train-plan",
+                                &plan.estimated_risk,
+                            );
+                            println!("{}", serde_json::to_string(&event)?);
+                        }
+                        let should_apply = matches!(auto_approve, AutoApproveLevel::Low)
+                            || plan.estimated_risk == "low";
+                        if should_apply || matches!(auto_approve, AutoApproveLevel::None) {
+                            match rfo_sweep::train::run_train(repo_path, &plan) {
+                                Ok(result) => {
+                                    applied += 1;
+                                    if !cli.quiet {
+                                        eprintln!(
+                                            "{rid}: {} succeeded, {} failed",
+                                            result.succeeded.len(),
+                                            result.failed.len()
+                                        );
+                                    }
+                                    if use_ndjson {
+                                        let event =
+                                            rfo_output::ndjson::NdjsonEvent::repo_done(rid, "ok");
+                                        println!("{}", serde_json::to_string(&event)?);
+                                    }
+                                }
+                                Err(e) => {
+                                    failed += 1;
+                                    eprintln!("{rid}: error: {e}");
+                                    if use_ndjson {
+                                        let event = rfo_output::ndjson::NdjsonEvent::repo_done(
+                                            rid, "failed",
+                                        );
+                                        println!("{}", serde_json::to_string(&event)?);
+                                    }
+                                }
+                            }
+                        } else {
+                            skipped += 1;
+                        }
+                    }
+                    if use_ndjson {
+                        let event =
+                            rfo_output::ndjson::NdjsonEvent::batch_done(applied, skipped, failed);
+                        println!("{}", serde_json::to_string(&event)?);
+                    } else {
+                        eprintln!(
+                            "Train complete: {applied} applied, {skipped} skipped, {failed} failed"
+                        );
+                    }
+                } else {
+                    let id = repo_id.as_deref().unwrap_or("unknown");
+                    let plan = rfo_sweep::train::plan_train(&path, id);
+                    let result = rfo_sweep::train::run_train(&path, &plan)?;
+                    println!("{}", serde_json::to_string_pretty(&result)?);
+                }
             }
         },
 
@@ -715,6 +1269,143 @@ fn run() -> Result<()> {
                 }
             }
             std::process::exit(report.exit_code());
+        }
+
+        // ── Config ──
+        Commands::Config { sub } => {
+            let cfg_path = paths.config_toml();
+            match sub {
+                Some(ConfigCommands::Print) | None => {
+                    let config = rfo_config::load_config(&cfg_path)?;
+                    let toml_str = toml::to_string_pretty(&config)?;
+                    println!("{toml_str}");
+                }
+                Some(ConfigCommands::Set { pair }) => {
+                    let (key, value) = pair
+                        .split_once('=')
+                        .ok_or_else(|| anyhow::anyhow!("expected KEY=VALUE format"))?;
+                    let mut config = rfo_config::load_config(&cfg_path)?;
+                    match key.trim() {
+                        "core.projects_dir" => config.core.projects_dir = value.trim().to_string(),
+                        "core.layout" => config.core.layout = value.trim().to_string(),
+                        "core.parallel" => config.core.parallel = value.trim().parse()?,
+                        "core.timeout_secs" => config.core.timeout_secs = value.trim().parse()?,
+                        "git.update_strategy" => {
+                            config.git.update_strategy = value.trim().to_string()
+                        }
+                        "git.autostash" => config.git.autostash = value.trim().parse()?,
+                        "safety.secret_scan" => {
+                            config.safety.secret_scan = value.trim().to_string()
+                        }
+                        other => anyhow::bail!("unknown config key: {other}"),
+                    }
+                    rfo_config::validate(&config)?;
+                    let toml_str = toml::to_string_pretty(&config)?;
+                    std::fs::write(&cfg_path, &toml_str)?;
+                    eprintln!("Set {key} = {}", value.trim());
+                }
+            }
+        }
+
+        // ── Self-update ──
+        Commands::SelfUpdate { check } => {
+            let current = env!("CARGO_PKG_VERSION");
+            if check {
+                eprintln!("Current version: {current}");
+                eprintln!("Check https://github.com/quangdang46/repo_forge/releases for updates.");
+            } else {
+                eprintln!("Current version: {current}");
+                eprintln!("To update, re-run the install script:");
+                #[cfg(unix)]
+                eprintln!(
+                    "  curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.sh | bash"
+                );
+                #[cfg(windows)]
+                eprintln!(
+                    "  irm https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.ps1 | iex"
+                );
+                #[cfg(not(any(unix, windows)))]
+                eprintln!("  See https://github.com/quangdang46/repo_forge#install");
+            }
+        }
+
+        // ── Robot docs ──
+        Commands::RobotDocs { topic } => {
+            let docs = generate_robot_docs(topic.as_deref());
+            println!("{}", serde_json::to_string_pretty(&docs)?);
+        }
+
+        // ── Fork ──
+        Commands::Fork { sub } => {
+            let conn = rfo_state::open_db(&db_path).context("opening state database")?;
+            match sub {
+                ForkCommands::Status { repo, format } => {
+                    let repos = match repo {
+                        Some(key) => vec![manage::find_repo(&conn, &key)?],
+                        None => manage::list(&conn, None)?,
+                    };
+                    for r in &repos {
+                        let path = PathBuf::from(&r.local_path);
+                        let is_fork = rfo_git::read::has_remote(&path, "upstream");
+                        match format {
+                            OutputFormat::Text => {
+                                let status = if is_fork {
+                                    "fork (has upstream)"
+                                } else {
+                                    "origin only"
+                                };
+                                println!("{}/{}: {status}", r.owner, r.name);
+                            }
+                            OutputFormat::Json => {
+                                let json = serde_json::json!({
+                                    "repo": format!("{}/{}", r.owner, r.name),
+                                    "is_fork": is_fork,
+                                });
+                                println!("{}", serde_json::to_string(&json)?);
+                            }
+                        }
+                    }
+                }
+                ForkCommands::Sync { repo } => {
+                    let repos = match repo {
+                        Some(key) => vec![manage::find_repo(&conn, &key)?],
+                        None => manage::list(&conn, None)?,
+                    };
+                    for r in &repos {
+                        let path = PathBuf::from(&r.local_path);
+                        if rfo_git::read::has_remote(&path, "upstream") {
+                            match rfo_git::mutation::fetch_remote(&path, "upstream") {
+                                Ok(()) => {
+                                    eprintln!("{}/{}: fetched upstream", r.owner, r.name);
+                                }
+                                Err(e) => {
+                                    eprintln!("{}/{}: fetch upstream failed: {e}", r.owner, r.name);
+                                }
+                            }
+                        }
+                    }
+                }
+                ForkCommands::Clean { repo, dry_run } => {
+                    let repos = match repo {
+                        Some(key) => vec![manage::find_repo(&conn, &key)?],
+                        None => manage::list(&conn, None)?,
+                    };
+                    for r in &repos {
+                        let path = PathBuf::from(&r.local_path);
+                        let merged = rfo_git::read::merged_branches(&path);
+                        for branch in &merged {
+                            if dry_run {
+                                eprintln!(
+                                    "[dry-run] {}/{}: would delete branch {branch}",
+                                    r.owner, r.name
+                                );
+                            } else {
+                                eprintln!("{}/{}: cleaned branch {branch}", r.owner, r.name);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

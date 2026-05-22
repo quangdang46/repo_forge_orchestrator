@@ -118,6 +118,53 @@ pub fn ahead_behind(repo_path: &Path, upstream: &str) -> Result<AheadBehind> {
     Ok(AheadBehind { ahead, behind })
 }
 
+/// Return true if the repository has a remote with the given name.
+///
+/// Returns false if the path is not a git repo or the remote query fails.
+pub fn has_remote(repo_path: &Path, remote: &str) -> bool {
+    let Ok(out) = std::process::Command::new("git")
+        .args(["remote"])
+        .current_dir(repo_path)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("LC_ALL", "C")
+        .output()
+    else {
+        return false;
+    };
+    if !out.status.success() {
+        return false;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .any(|line| line.trim() == remote)
+}
+
+/// List local branches that have been merged into HEAD.
+///
+/// Excludes the current branch. Returns an empty list on any error.
+pub fn merged_branches(repo_path: &Path) -> Vec<String> {
+    let Ok(out) = std::process::Command::new("git")
+        .args(["branch", "--merged", "--format=%(refname:short)"])
+        .current_dir(repo_path)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("LC_ALL", "C")
+        .output()
+    else {
+        return Vec::new();
+    };
+    if !out.status.success() {
+        return Vec::new();
+    }
+    let current = current_branch(repo_path).ok().flatten();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .filter(|s| Some(s) != current.as_ref())
+        .filter(|s| s != "main" && s != "master")
+        .collect()
+}
+
 fn open_repo(path: &Path) -> Result<gix::Repository> {
     gix::open(path).with_context(|| format!("opening git repo at {}", path.display()))
 }
