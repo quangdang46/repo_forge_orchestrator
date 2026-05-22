@@ -174,9 +174,15 @@ fn current_user() -> Option<String> {
 }
 
 fn current_host() -> Option<String> {
-    // Try `HOSTNAME` env var first (set by most shells), fall back to
-    // /etc/hostname on Unix. We deliberately avoid an extra crate here.
+    // Try `HOSTNAME` env var first (set by most shells), then
+    // `COMPUTERNAME` (Windows), fall back to /etc/hostname on Unix.
     if let Ok(h) = std::env::var("HOSTNAME") {
+        if !h.is_empty() {
+            return Some(h);
+        }
+    }
+    #[cfg(windows)]
+    if let Ok(h) = std::env::var("COMPUTERNAME") {
         if !h.is_empty() {
             return Some(h);
         }

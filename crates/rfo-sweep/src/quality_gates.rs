@@ -306,10 +306,17 @@ mod tests {
     #[test]
     fn run_gate_passed_status() {
         let tmp = TempDir::new().unwrap();
+        #[cfg(unix)]
         let gate = Gate {
             name: "true",
             program: "true",
             args: &[],
+        };
+        #[cfg(windows)]
+        let gate = Gate {
+            name: "true",
+            program: "cmd",
+            args: &["/C", "exit", "0"],
         };
         let r = run_gate(tmp.path(), &gate);
         assert_eq!(r.status, GateStatus::Passed);
@@ -319,10 +326,17 @@ mod tests {
     #[test]
     fn run_gate_failed_status() {
         let tmp = TempDir::new().unwrap();
+        #[cfg(unix)]
         let gate = Gate {
             name: "false",
             program: "false",
             args: &[],
+        };
+        #[cfg(windows)]
+        let gate = Gate {
+            name: "false",
+            program: "cmd",
+            args: &["/C", "exit", "1"],
         };
         let r = run_gate(tmp.path(), &gate);
         assert_eq!(r.status, GateStatus::Failed);

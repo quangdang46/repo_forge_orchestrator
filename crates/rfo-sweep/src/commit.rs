@@ -41,9 +41,10 @@ pub fn sweep_commit(repo_path: &Path, message: &str) -> Result<CommitOutcome> {
         .iter()
         .filter_map(|f| {
             if let Ok(rel) = f.strip_prefix(repo_path) {
-                let s = rel.to_string_lossy();
+                // Normalize to forward slashes so glob patterns match on Windows.
+                let s = rel.to_string_lossy().replace('\\', "/");
                 if denylist.is_denied(&s) {
-                    return Some(s.into_owned());
+                    return Some(s);
                 }
             }
             None
