@@ -9,6 +9,9 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[package.metadata.dist]
+dist = true
+
 [[bin]]
 name = "rfo"
 path = "src/main.rs"
