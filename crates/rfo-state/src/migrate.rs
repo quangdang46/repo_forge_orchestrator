@@ -27,6 +27,8 @@ fn apply(conn: &Connection, from: i64) -> Result<()> {
     let migrations: &[&str] = &[
         // v1: full initial schema (PLAN.md §13)
         V1_INITIAL_SCHEMA,
+        // v2: inbox_dismissed + repo_tags (ADDITION.md A2 + A1)
+        V2_INBOX_AND_TAGS,
     ];
 
     for (i, sql) in migrations.iter().enumerate() {
@@ -202,6 +204,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
 "#;
 
+const V2_INBOX_AND_TAGS: &str = r#"
+-- v2: inbox dismissals + repo tags (ADDITION.md A1/A2)
+
+CREATE TABLE IF NOT EXISTS inbox_dismissed (
+    repo_id         TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+    dismissed_at    INTEGER NOT NULL,
+    PRIMARY KEY (repo_id)
+);
+
+CREATE TABLE IF NOT EXISTS repo_tags (
+    repo_id         TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+    tag             TEXT NOT NULL,
+    PRIMARY KEY (repo_id, tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_repo_tags_tag ON repo_tags(tag);
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,7 +237,7 @@ mod tests {
     fn migration_records_version() {
         let conn = fresh();
         let v = current_version(&conn).unwrap();
-        assert_eq!(v, 1);
+        assert_eq!(v, 2);
     }
 
     #[test]
@@ -226,7 +246,7 @@ mod tests {
         run(&conn).unwrap();
         run(&conn).unwrap();
         let v = current_version(&conn).unwrap();
-        assert_eq!(v, 1);
+        assert_eq!(v, 2);
     }
 
     #[test]

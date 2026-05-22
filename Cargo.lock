@@ -2933,6 +2933,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "globset",
  "predicates",
  "rfo-config",
  "rfo-context",
@@ -2950,6 +2951,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

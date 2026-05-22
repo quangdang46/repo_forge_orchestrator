@@ -33,6 +33,8 @@ tracing-subscriber.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+toml.workspace = true
+globset.workspace = true
 # tempfile is used by doctor tests in src/ (behind #[cfg(test)])
 tempfile.workspace = true
 
