@@ -128,3 +128,13 @@ lto = false
 incremental = true
 codegen-units = 256
 panic = "unwind"
+
+# cargo-dist
+[profile.dist]
+inherits = "release"
+lto = "thin"
+strip = "symbols"
+opt-level = 3
+codegen-units = 16
+panic = "abort"
+debug = false
