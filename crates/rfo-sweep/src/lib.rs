@@ -10,7 +10,6 @@ pub mod policy_check;
 pub mod quality_gates;
 pub mod risk;
 pub mod secret_scan;
-pub mod train;
 
 pub use denylist::{DEFAULT_DENYLIST, Denylist};
 pub use quality_gates::{

@@ -2957,6 +2957,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfo-ai-sync"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rfo-config",
+ "rfo-git",
+ "rfo-jobs",
+ "rfo-ntm",
+ "rfo-sync",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "rfo-config"
 version = "0.1.0"
 dependencies = [
@@ -3000,6 +3016,22 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "uuid",
+]
+
+[[package]]
+name = "rfo-dep-update"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rfo-config",
+ "rfo-core",
+ "rfo-git",
+ "rfo-jobs",
+ "rfo-ntm",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3068,6 +3100,18 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "rfo-ntm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]

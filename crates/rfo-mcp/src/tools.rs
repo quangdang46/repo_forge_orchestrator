@@ -25,33 +25,6 @@ pub fn list_tools() -> Vec<ToolDef> {
             }),
         },
         ToolDef {
-            name: "rfo_inbox".into(),
-            description: "Get the inbox with items needing attention".into(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        ToolDef {
-            name: "rfo_inbox_next".into(),
-            description: "Get the next inbox item (safe to poll)".into(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        ToolDef {
-            name: "rfo_inbox_done".into(),
-            description: "Mark an inbox item as done".into(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "item_id": { "type": "string", "description": "Inbox item id" }
-                },
-                "required": ["item_id"]
-            }),
-        },
-        ToolDef {
             name: "rfo_health".into(),
             description: "Get health status for a repo".into(),
             parameters: serde_json::json!({
@@ -115,17 +88,6 @@ pub fn list_tools() -> Vec<ToolDef> {
                 }
             }),
         },
-        ToolDef {
-            name: "rfo_train_run".into(),
-            description: "Run a Tiny PR Train on a repo".into(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "repo": { "type": "string" },
-                    "dry_run": { "type": "boolean", "default": false }
-                }
-            }),
-        },
     ]
 }
 
@@ -138,14 +100,10 @@ mod tests {
         let tools = list_tools();
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(names.contains(&"rfo_repos"));
-        assert!(names.contains(&"rfo_inbox"));
-        assert!(names.contains(&"rfo_inbox_next"));
-        assert!(names.contains(&"rfo_inbox_done"));
         assert!(names.contains(&"rfo_health"));
         assert!(names.contains(&"rfo_plan_create"));
         assert!(names.contains(&"rfo_plan_apply"));
         assert!(names.contains(&"rfo_sweep_agent_plan"));
-        assert!(names.contains(&"rfo_train_run"));
     }
 
     #[test]

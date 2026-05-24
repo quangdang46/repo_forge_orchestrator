@@ -157,20 +157,11 @@ enum Commands {
         missing: bool,
     },
 
-    // ── Health / Inbox ───────────────────────────────────────────────
+    // ── Health ───────────────────────────────────────────────────────
     /// Show health score for repos
     Health {
         /// Specific repo key
         repo: Option<String>,
-        /// Output format
-        #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
-        format: OutputFormat,
-    },
-
-    /// Show inbox (items needing attention)
-    Inbox {
-        #[command(subcommand)]
-        sub: Option<InboxCommands>,
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
@@ -202,13 +193,6 @@ enum Commands {
     Sweep {
         #[command(subcommand)]
         sub: SweepCommands,
-    },
-
-    // ── Train ────────────────────────────────────────────────────────
-    /// Tiny PR Train commands
-    Train {
-        #[command(subcommand)]
-        sub: TrainCommands,
     },
 
     // ── Doctor ───────────────────────────────────────────────────────
@@ -252,16 +236,7 @@ enum Commands {
     },
 }
 
-#[derive(Debug, Subcommand)]
-enum InboxCommands {
-    /// Get the next inbox item (safe to poll)
-    Next,
-    /// Mark an inbox item as done
-    Done {
-        /// Item id to mark as done
-        item_id: String,
-    },
-}
+
 
 #[derive(Debug, Subcommand)]
 enum RunCommands {
@@ -336,46 +311,6 @@ enum SweepCommands {
         #[arg(long)]
         repos: Option<String>,
         /// Target repos by filter (e.g. "tag:needs-fmt", "health:<50")
-        #[arg(long)]
-        filter: Option<String>,
-        /// Target all managed repos
-        #[arg(long)]
-        all: bool,
-        /// Preview without changes
-        #[arg(long)]
-        dry_run: bool,
-        /// Auto-approve level: none (default), low
-        #[arg(long, value_enum, default_value_t = AutoApproveLevel::None)]
-        auto_approve: AutoApproveLevel,
-        /// NDJSON event stream output
-        #[arg(long)]
-        output: Option<String>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum TrainCommands {
-    /// Plan a train run
-    Plan {
-        /// Repo path
-        #[arg(long, default_value = ".")]
-        path: PathBuf,
-        /// Repo id
-        #[arg(long)]
-        repo_id: Option<String>,
-    },
-    /// Execute a train run
-    Run {
-        /// Repo path
-        #[arg(long, default_value = ".")]
-        path: PathBuf,
-        /// Repo id
-        #[arg(long)]
-        repo_id: Option<String>,
-        /// Target repos by pattern (e.g. "owner/*")
-        #[arg(long)]
-        repos: Option<String>,
-        /// Target repos by filter
         #[arg(long)]
         filter: Option<String>,
         /// Target all managed repos
@@ -527,14 +462,13 @@ fn generate_robot_docs(topic: Option<&str>) -> serde_json::Value {
                 "rfo sync",
                 "rfo status",
                 "rfo health",
-                "rfo inbox",
+                "rfo health",
             ]
         }),
         Some("examples") => serde_json::json!({
             "examples": [
-                {"description": "Daily check-in", "commands": ["rfo sync", "rfo inbox", "rfo status"]},
+                {"description": "Daily check-in", "commands": ["rfo sync", "rfo health", "rfo status"]},
                 {"description": "Review a change", "commands": ["rfo review plan owner/repo --summary 'Bump deps' --risk medium", "rfo review list-plans", "rfo review apply <plan-id>"]},
-                {"description": "Deterministic cleanup", "commands": ["rfo train plan --path ./repo", "rfo train run --path ./repo"]},
                 {"description": "Safe commit", "commands": ["rfo sweep commit --path . --message 'chore: format'"]},
             ]
         }),
@@ -542,7 +476,6 @@ fn generate_robot_docs(topic: Option<&str>) -> serde_json::Value {
             "schemas": {
                 "sync_result": {"repo_id": "string", "action": "string", "status": "string", "duration_ms": "u64", "error": "string|null"},
                 "health_snapshot": {"id": "string", "repo_id": "string", "score": "i64", "class": "string"},
-                "inbox_item": {"repo_id": "string", "owner": "string", "name": "string", "priority": "i64", "reason": "string"},
             }
         }),
         _ => serde_json::json!({
@@ -833,51 +766,6 @@ fn run() -> Result<()> {
             }
         }
 
-        Commands::Inbox { sub, format } => {
-            let conn = rfo_state::open_db(&db_path).context("opening state database")?;
-            match sub {
-                Some(InboxCommands::Next) => {
-                    let items = rfo_state::queries::compute_inbox(&conn)?;
-                    if let Some(item) = items.into_iter().next() {
-                        let json = serde_json::json!({
-                            "id": format!("inbox-{}", item.repo_id),
-                            "repo": format!("{}/{}", item.owner, item.name),
-                            "priority": item.priority,
-                            "reason": item.reason,
-                            "suggested_action": format!("rfo health {}/{}", item.owner, item.name),
-                        });
-                        println!("{}", serde_json::to_string(&json)?);
-                    } else {
-                        println!("{{}}");
-                    }
-                }
-                Some(InboxCommands::Done { item_id }) => {
-                    let repo_id = item_id.strip_prefix("inbox-").unwrap_or(&item_id);
-                    rfo_state::queries::mark_inbox_done(&conn, repo_id)?;
-                    eprintln!("Marked {item_id} as done.");
-                }
-                None => {
-                    let items = rfo_state::queries::compute_inbox(&conn)?;
-                    if items.is_empty() {
-                        eprintln!("Inbox is empty.");
-                    }
-                    for item in &items {
-                        match format {
-                            OutputFormat::Text => {
-                                println!(
-                                    "{}/{}: priority={} {}",
-                                    item.owner, item.name, item.priority, item.reason
-                                );
-                            }
-                            OutputFormat::Json => {
-                                println!("{}", serde_json::to_string(item)?);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         // ── Runs / Timeline ──
         Commands::Run { sub } => {
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
@@ -1131,122 +1019,6 @@ fn run() -> Result<()> {
                     let id = repo_id.as_deref().unwrap_or("unknown");
                     let summary = rfo_sweep::agent::sweep_repo(&path, id)?;
                     println!("{}", serde_json::to_string_pretty(&summary)?);
-                }
-            }
-        },
-
-        // ── Train ──
-        Commands::Train { sub } => match sub {
-            TrainCommands::Plan { path, repo_id } => {
-                let id = repo_id.as_deref().unwrap_or("unknown");
-                let plan = rfo_sweep::train::plan_train(&path, id);
-                println!("{}", serde_json::to_string_pretty(&plan)?);
-            }
-            TrainCommands::Run {
-                path,
-                repo_id,
-                repos,
-                filter,
-                all,
-                dry_run,
-                auto_approve,
-                output,
-            } => {
-                let use_ndjson = output.as_deref() == Some("json");
-
-                if repos.is_some() || filter.is_some() || all {
-                    let conn = rfo_state::open_db(&db_path).context("opening state database")?;
-                    let targets = resolve_multi_repo_targets(
-                        &conn,
-                        repos.as_deref(),
-                        filter.as_deref(),
-                        all,
-                        &paths,
-                    )?;
-                    if use_ndjson {
-                        let event = rfo_output::ndjson::NdjsonEvent::batch_start(
-                            targets.len() as u32,
-                            "train",
-                            dry_run,
-                        );
-                        println!("{}", serde_json::to_string(&event)?);
-                    }
-                    let mut applied = 0u32;
-                    let mut skipped = 0u32;
-                    let mut failed = 0u32;
-                    for (rid, repo_path) in &targets {
-                        if use_ndjson {
-                            let event = rfo_output::ndjson::NdjsonEvent::repo_start(rid);
-                            println!("{}", serde_json::to_string(&event)?);
-                        }
-                        if dry_run {
-                            let plan = rfo_sweep::train::plan_train(repo_path, rid);
-                            eprintln!("[dry-run] {rid}: {} fixers", plan.fixers.len());
-                            skipped += 1;
-                            if use_ndjson {
-                                let event =
-                                    rfo_output::ndjson::NdjsonEvent::repo_done(rid, "skipped");
-                                println!("{}", serde_json::to_string(&event)?);
-                            }
-                            continue;
-                        }
-                        let plan = rfo_sweep::train::plan_train(repo_path, rid);
-                        if use_ndjson {
-                            let event = rfo_output::ndjson::NdjsonEvent::plan_created(
-                                rid,
-                                "train-plan",
-                                &plan.estimated_risk,
-                            );
-                            println!("{}", serde_json::to_string(&event)?);
-                        }
-                        let should_apply = matches!(auto_approve, AutoApproveLevel::Low)
-                            || plan.estimated_risk == "low";
-                        if should_apply || matches!(auto_approve, AutoApproveLevel::None) {
-                            match rfo_sweep::train::run_train(repo_path, &plan) {
-                                Ok(result) => {
-                                    applied += 1;
-                                    if !cli.quiet {
-                                        eprintln!(
-                                            "{rid}: {} succeeded, {} failed",
-                                            result.succeeded.len(),
-                                            result.failed.len()
-                                        );
-                                    }
-                                    if use_ndjson {
-                                        let event =
-                                            rfo_output::ndjson::NdjsonEvent::repo_done(rid, "ok");
-                                        println!("{}", serde_json::to_string(&event)?);
-                                    }
-                                }
-                                Err(e) => {
-                                    failed += 1;
-                                    eprintln!("{rid}: error: {e}");
-                                    if use_ndjson {
-                                        let event = rfo_output::ndjson::NdjsonEvent::repo_done(
-                                            rid, "failed",
-                                        );
-                                        println!("{}", serde_json::to_string(&event)?);
-                                    }
-                                }
-                            }
-                        } else {
-                            skipped += 1;
-                        }
-                    }
-                    if use_ndjson {
-                        let event =
-                            rfo_output::ndjson::NdjsonEvent::batch_done(applied, skipped, failed);
-                        println!("{}", serde_json::to_string(&event)?);
-                    } else {
-                        eprintln!(
-                            "Train complete: {applied} applied, {skipped} skipped, {failed} failed"
-                        );
-                    }
-                } else {
-                    let id = repo_id.as_deref().unwrap_or("unknown");
-                    let plan = rfo_sweep::train::plan_train(&path, id);
-                    let result = rfo_sweep::train::run_train(&path, &plan)?;
-                    println!("{}", serde_json::to_string_pretty(&result)?);
                 }
             }
         },

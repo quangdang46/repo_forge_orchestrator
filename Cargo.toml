@@ -14,6 +14,9 @@ members = [
     "crates/rfo-sweep",
     "crates/rfo-provider",
     "crates/rfo-mcp",
+    "crates/rfo-ntm",
+    "crates/rfo-ai-sync",
+    "crates/rfo-dep-update",
     "crates/rfo-testkit",
     "xtask",
 ]
@@ -45,6 +48,9 @@ rfo-review      = { path = "crates/rfo-review" }
 rfo-sweep       = { path = "crates/rfo-sweep" }
 rfo-provider    = { path = "crates/rfo-provider" }
 rfo-mcp         = { path = "crates/rfo-mcp" }
+rfo-ntm         = { path = "crates/rfo-ntm" }
+rfo-ai-sync     = { path = "crates/rfo-ai-sync" }
+rfo-dep-update  = { path = "crates/rfo-dep-update" }
 rfo-testkit     = { path = "crates/rfo-testkit" }
 
 # External — shared across multiple crates

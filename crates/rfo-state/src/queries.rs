@@ -158,7 +158,7 @@ pub fn score_all_health(conn: &Connection) -> Result<Vec<HealthSnapshot>> {
 }
 
 // ---------------------------------------------------------------------------
-// Inbox scoring (rfo-30)
+// Helpers
 // ---------------------------------------------------------------------------
 
 /// Inbox item representing something needing attention.
@@ -377,38 +377,5 @@ mod tests {
         add_repo(&conn, "r2", "bob", "proj2");
         let snaps = score_all_health(&conn).unwrap();
         assert_eq!(snaps.len(), 2);
-    }
-
-    #[test]
-    fn compute_inbox_empty_when_healthy() {
-        let conn = db();
-        add_repo(&conn, "r1", "alice", "proj1");
-        let inbox = compute_inbox(&conn).unwrap();
-        assert!(inbox.is_empty());
-    }
-
-    #[test]
-    fn compute_inbox_lists_disabled_repos() {
-        let conn = db();
-        add_repo(&conn, "r1", "alice", "proj1");
-        conn.execute("UPDATE repos SET disabled = 1 WHERE id = 'r1'", [])
-            .unwrap();
-        let inbox = compute_inbox(&conn).unwrap();
-        assert_eq!(inbox.len(), 1);
-        assert_eq!(inbox[0].repo_id, "r1");
-        assert!(inbox[0].priority >= 10);
-    }
-
-    #[test]
-    fn compute_inbox_sorted_by_priority() {
-        let conn = db();
-        add_repo(&conn, "r1", "alice", "low");
-        add_repo(&conn, "r2", "bob", "high");
-        conn.execute("UPDATE repos SET archived = 1 WHERE id = 'r1'", [])
-            .unwrap();
-        conn.execute("UPDATE repos SET disabled = 1 WHERE id = 'r2'", [])
-            .unwrap();
-        let inbox = compute_inbox(&conn).unwrap();
-        assert!(inbox[0].priority >= inbox[1].priority);
     }
 }

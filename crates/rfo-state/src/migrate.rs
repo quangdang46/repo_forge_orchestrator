@@ -27,8 +27,10 @@ fn apply(conn: &Connection, from: i64) -> Result<()> {
     let migrations: &[&str] = &[
         // v1: full initial schema (PLAN.md §13)
         V1_INITIAL_SCHEMA,
-        // v2: inbox_dismissed + repo_tags (ADDITION.md A2 + A1)
-        V2_INBOX_AND_TAGS,
+        // v2: repo_tags (ADDITION.md A2)
+        V2_REPO_TAGS,
+        // v3: DROP inbox_dismissed (removed inbox feature)
+        V3_DROP_INBOX,
     ];
 
     for (i, sql) in migrations.iter().enumerate() {
@@ -204,14 +206,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
 "#;
 
-const V2_INBOX_AND_TAGS: &str = r#"
--- v2: inbox dismissals + repo tags (ADDITION.md A1/A2)
-
-CREATE TABLE IF NOT EXISTS inbox_dismissed (
-    repo_id         TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
-    dismissed_at    INTEGER NOT NULL,
-    PRIMARY KEY (repo_id)
-);
+const V2_REPO_TAGS: &str = r#"
+-- v2: repo tags (ADDITION.md A2)
 
 CREATE TABLE IF NOT EXISTS repo_tags (
     repo_id         TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
@@ -220,6 +216,11 @@ CREATE TABLE IF NOT EXISTS repo_tags (
 );
 
 CREATE INDEX IF NOT EXISTS idx_repo_tags_tag ON repo_tags(tag);
+"#;
+
+const V3_DROP_INBOX: &str = r#"
+-- v3: drop inbox_dismissed (removed inbox feature rfo-refactor)
+DROP TABLE IF EXISTS inbox_dismissed;
 "#;
 
 #[cfg(test)]
@@ -237,7 +238,7 @@ mod tests {
     fn migration_records_version() {
         let conn = fresh();
         let v = current_version(&conn).unwrap();
-        assert_eq!(v, 2);
+        assert_eq!(v, 3);
     }
 
     #[test]
@@ -246,7 +247,7 @@ mod tests {
         run(&conn).unwrap();
         run(&conn).unwrap();
         let v = current_version(&conn).unwrap();
-        assert_eq!(v, 2);
+        assert_eq!(v, 3);
     }
 
     #[test]
@@ -269,6 +270,7 @@ mod tests {
             "jobs",
             "plans",
             "repo_health_snapshots",
+            "repo_tags",
             "repos",
             "run_events",
             "runs",

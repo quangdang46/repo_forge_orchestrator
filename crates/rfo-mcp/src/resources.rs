@@ -23,12 +23,6 @@ pub fn list_resources() -> Vec<ResourceDef> {
             mime_type: "application/json".into(),
         },
         ResourceDef {
-            uri: "rfo://inbox".into(),
-            name: "inbox".into(),
-            description: "Items needing attention".into(),
-            mime_type: "application/json".into(),
-        },
-        ResourceDef {
             uri: "rfo://context/{owner}/{repo}".into(),
             name: "context".into(),
             description: "Context for a specific repo".into(),
@@ -46,6 +40,5 @@ mod tests {
         let resources = list_resources();
         let uris: Vec<&str> = resources.iter().map(|r| r.uri.as_str()).collect();
         assert!(uris.contains(&"rfo://repos"));
-        assert!(uris.contains(&"rfo://inbox"));
     }
 }
