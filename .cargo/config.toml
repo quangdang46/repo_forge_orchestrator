@@ -18,9 +18,6 @@ protocol = "sparse"
 # rustflags here would apply to every crate, every build. Leave empty by
 # default — opt-in via per-target sections below if needed.
 
-[target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
-
 [term]
 verbose = false
 color = "auto"
