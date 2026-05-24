@@ -101,8 +101,17 @@ jobs:
           irm "https://github.com/axodotdev/cargo-dist/releases/download/v$env:DIST_VERSION/cargo-dist-installer.ps1" | iex
 
       - name: Build artifacts
+        if: runner.os != 'Windows'
         shell: bash
         run: dist build --tag="${GITHUB_REF_NAME}" --target=${{ matrix.target }} --artifacts=local
+
+      - name: Build artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          export LIBZ_SYS_NO_PKG_CONFIG=1
+          export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS="-C target-feature=+crt-static"
+          dist build --tag="${GITHUB_REF_NAME}" --target=${{ matrix.target }} --artifacts=local
 
       - name: Generate SHA256 checksums
         shell: bash
