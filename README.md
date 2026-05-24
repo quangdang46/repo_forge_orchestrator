@@ -27,7 +27,7 @@ It is the GitHub-first Rust evolution of the Python tool `ru` (`repo_updater`),
 preserving the daily UX while adding inspectable runs and AI-safe primitives.
 
 > **Status:** early development — public API and command flags may change before
-> v1.0. See [`PLAN.md`](PLAN.md) and [`ADDITION.md`](ADDITION.md) for the roadmap.
+> v1.0.
 
 ---
 
@@ -152,8 +152,6 @@ rfo [--config-dir <DIR>] [--state-dir <DIR>] <COMMAND>
 |               | `rfo review list-plans`              | List pending plans.                              |
 | Sweep         | `rfo sweep commit --message <msg>`   | Stage + commit with safety gates.                |
 |               | `rfo sweep agent [--repo-id <id>]`   | Run the sweep agent on a repo.                   |
-| Train         | `rfo train plan`                     | Plan a deterministic Tiny PR Train.              |
-|               | `rfo train run`                      | Execute the train.                               |
 
 Run `rfo <command> --help` for full flags. Every command supporting structured
 output accepts `--format json`.
@@ -179,11 +177,14 @@ rfo review apply plan-abc123
 rfo run timeline run-xyz789   # what actually happened
 ```
 
-### Deterministic cleanup across many repos
+### AI sync across dirty repos
 
 ```bash
-rfo train plan --path ./projects/owner/repo
-rfo train run  --path ./projects/owner/repo
+# Find repos with uncommitted changes
+rfo status
+
+# Auto-commit and push each dirty repo via AI
+rfo ai-sync --provider claude
 ```
 
 ### Safe commit gating
@@ -237,7 +238,7 @@ Multi-repo runs additionally emit an NDJSON event stream with `--output json`
 
 ---
 
-## Workspace layout
+## Crates
 
 `rfo` is a Cargo workspace. The user-facing binary lives in `crates/rfo`; the
 rest are libraries kept small and focused.
@@ -247,7 +248,7 @@ crates/
 ├── rfo/             # CLI entry point (the `rfo` binary)
 ├── rfo-core/        # shared types, errors, IDs
 ├── rfo-config/      # config file loader + XDG paths
-├── rfo-state/       # SQLite schema, queries, health, inbox
+├── rfo-state/       # SQLite schema, queries, health
 ├── rfo-output/      # text + JSON renderers
 ├── rfo-jobs/        # run records, events, timeline
 ├── rfo-git/         # local git: gix reads + shell-out mutations
@@ -255,7 +256,10 @@ crates/
 ├── rfo-sync/        # add/remove/import/sync/status/prune
 ├── rfo-context/     # context packs for humans + AI
 ├── rfo-review/      # plan / apply / rollback workflow
-├── rfo-sweep/       # sweep commit, sweep agent, Tiny PR Train
+├── rfo-sweep/       # sweep commit, sweep agent
+├── rfo-ntm/         # ntm robot-mode integration
+├── rfo-ai-sync/     # AI-powered auto-commit for dirty repos
+├── rfo-dep-update/  # AI-powered dependency updates
 ├── rfo-provider/    # provider abstraction (GitHub-only in v1)
 ├── rfo-mcp/         # MCP server: resources + tools
 └── rfo-testkit/     # shared test fixtures
@@ -286,15 +290,9 @@ Releases are tag-driven (`v*.*.*`) and produced by
 
 ---
 
-## Roadmap
-
-- [`PLAN.md`](PLAN.md) — pragmatic v1 product plan and `ru` parity contract.
-- [`ADDITION.md`](ADDITION.md) — five accepted additions for AI orchestration:
-  multi-repo targeting, inbox queue, MCP tools, NDJSON progress, low-risk
-  auto-approve.
-
-Bug reports and feature requests welcome at
-[github.com/quangdang46/repo_forge/issues](https://github.com/quangdang46/repo_forge/issues).
+Releases are tag-driven (`v*.*.*`) and produced by
+[`cargo-dist`](https://github.com/axodotdev/cargo-dist) — see
+[`.github/workflows/release.yml`](.github/workflows/release.yml).
 
 ---
 
