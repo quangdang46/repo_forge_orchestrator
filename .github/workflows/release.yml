@@ -112,6 +112,7 @@ jobs:
           export LIBZ_SYS_NO_PKG_CONFIG=1
           export LIBZ_SYS_STATIC=1
           export RUSTFLAGS="-C target-feature=+crt-static"
+          export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS="-C target-feature=+crt-static"
           dist build --tag="${GITHUB_REF_NAME}" --target=${{ matrix.target }} --artifacts=local
 
       - name: Generate SHA256 checksums
