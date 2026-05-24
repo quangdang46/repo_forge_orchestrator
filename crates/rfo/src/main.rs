@@ -236,8 +236,6 @@ enum Commands {
     },
 }
 
-
-
 #[derive(Debug, Subcommand)]
 enum RunCommands {
     /// List recent runs

@@ -3,9 +3,9 @@
 //! Stateless: processes each repo independently without persistent state.
 
 use anyhow::{Context, Result};
-use rfo_sync::manage::TrackedRepo;
 use rfo_git::read::is_dirty;
 use rfo_ntm::{self, NtmExit};
+use rfo_sync::manage::TrackedRepo;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -159,7 +159,10 @@ pub fn sync_repo(
     let phase1_response = rfo_ntm::run_session(&session, provider, &phase1, timeout)?;
 
     if !matches!(phase1_response, NtmExit::Ok) {
-        return Ok((format!("phase1 failed: {}", phase1_response), phase1_response));
+        return Ok((
+            format!("phase1 failed: {}", phase1_response),
+            phase1_response,
+        ));
     }
 
     let commit_message = "auto-commit from ai-sync";

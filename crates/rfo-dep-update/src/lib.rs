@@ -60,13 +60,18 @@ pub fn check_outdated(repo_path: &Path, ecosystem: &str) -> Result<Vec<String>> 
                 .output();
             match out {
                 Ok(o) if o.status.success() => {
-                    let json: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap_or_default();
+                    let json: serde_json::Value =
+                        serde_json::from_slice(&o.stdout).unwrap_or_default();
                     let names: Vec<String> = json
                         .as_object()
                         .map(|obj| {
                             obj.keys()
                                 .filter_map(|k| {
-                                    if k.starts_with('@') { None } else { Some(k.clone()) }
+                                    if k.starts_with('@') {
+                                        None
+                                    } else {
+                                        Some(k.clone())
+                                    }
                                 })
                                 .collect()
                         })
