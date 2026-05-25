@@ -99,9 +99,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends musl-tools
       # ARM cross-compilation: install cross-compiler on x86_64 Ubuntu.
       # On native ARM runners (ubuntu-24.04-arm), the default linker works.
+      # libz-ng-sys (via cmake) also needs the C++ cross-compiler for CMake's
+      # compiler ABI detection, so install g++ as well.
       - name: Install ARM cross-compiler
         if: contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
-      - run: cargo build --release --workspace --target ${{ matrix.target }}
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      - name: Build
+        env:
+          # Tell the cc / cmake crates to use the ARM cross-compilers when
+          # building C/C++ dependencies (e.g. libz-ng-sys) for the aarch64
+          # Linux target.  Only set on Linux x64 → aarch64 cross builds.
+          CC_aarch64_unknown_linux_gnu: ${{ contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64' && 'aarch64-linux-gnu-gcc' || '' }}
+          CXX_aarch64_unknown_linux_gnu: ${{ contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64' && 'aarch64-linux-gnu-g++' || '' }}
+          AR_aarch64_unknown_linux_gnu: ${{ contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64' && 'aarch64-linux-gnu-ar' || '' }}
+        run: cargo build --release --workspace --target ${{ matrix.target }}
