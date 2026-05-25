@@ -54,6 +54,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          # Windows post-save sometimes fails with file-lock errors, marking
+          # the whole job as failed even though tests passed.  Only save the
+          # cache from the build matrix (which also uses rust-cache).
+          save-if: ${{ runner.os != 'Windows' }}
       - run: cargo test --all-features --verbose --workspace
       - run: cargo test --doc --workspace
 
@@ -94,14 +99,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends musl-tools
       # ARM cross-compilation: install cross-compiler on x86_64 Ubuntu.
       # On native ARM runners (ubuntu-24.04-arm), the default linker works.
+      # libz-ng-sys (via cmake) also needs the C++ cross-compiler for CMake's
+      # compiler ABI detection, so install g++ as well.
       - name: Install ARM cross-compiler
         if: contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
-      - name: Configure ARM cross-linker
-        if: contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64'
-        run: |
-          mkdir -p .cargo
-          printf '[target.aarch64-unknown-linux-gnu]\nlinker = "aarch64-linux-gnu-gcc"\n' >> .cargo/config.toml
-      - run: cargo build --release --workspace --target ${{ matrix.target }}
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      - name: Build
+        env:
+          # Tell the cc / cmake crates to use the ARM cross-compilers when
+          # building C/C++ dependencies (e.g. libz-ng-sys) for the aarch64
+          # Linux target.  Only set on Linux x64 → aarch64 cross builds.
+          CC_aarch64_unknown_linux_gnu: ${{ contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64' && 'aarch64-linux-gnu-gcc' || '' }}
+          CXX_aarch64_unknown_linux_gnu: ${{ contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64' && 'aarch64-linux-gnu-g++' || '' }}
+          AR_aarch64_unknown_linux_gnu: ${{ contains(matrix.target, 'aarch64') && runner.os == 'Linux' && runner.arch == 'X64' && 'aarch64-linux-gnu-ar' || '' }}
+        run: cargo build --release --workspace --target ${{ matrix.target }}
