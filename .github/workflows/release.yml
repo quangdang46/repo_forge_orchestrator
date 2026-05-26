@@ -199,13 +199,35 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+      # Download each artifact individually to avoid pattern matching issues
       - uses: actions/download-artifact@v4
         with:
+          name: dist-x86_64-unknown-linux-musl
+          path: artifacts/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-aarch64-unknown-linux-musl
+          path: artifacts/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-x86_64-apple-darwin
+          path: artifacts/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-aarch64-apple-darwin
+          path: artifacts/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-x86_64-pc-windows-msvc
+          path: artifacts/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-global
           path: artifacts
-          pattern: dist-*
-          merge-multiple: true
       - name: List artifacts
-        run: ls -la artifacts
+        run: |
+          echo "=== artifacts listing ==="
+          find artifacts -type f | sort
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

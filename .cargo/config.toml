@@ -24,3 +24,8 @@ color = "auto"
 
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
+
+# Required for cargo-dist Windows MSVC builds to resolve UCRT symbols
+# used by libz-ng-sys (via reqwest dependency).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
