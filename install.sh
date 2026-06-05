@@ -2,7 +2,7 @@
 # rfo installer (Linux + macOS, x86_64 + aarch64).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge_orchestrator/main/install.sh | bash
 #
 # Environment overrides:
 #   RFO_VERSION       Tag to install (e.g. v0.1.0). Default: latest GitHub release.
@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-REPO="quangdang46/repo_forge"
+REPO="quangdang46/repo_forge_orchestrator"
 BIN="rfo"
 VERSION="${RFO_VERSION:-latest}"
 INSTALL_DIR="${RFO_INSTALL_DIR:-$HOME/.local/bin}"

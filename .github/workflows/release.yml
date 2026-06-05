@@ -233,8 +233,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
+          find artifacts -type f | sort
+          echo "---"
           gh release create "${TAG}" \
             --title "${TAG}" \
             --generate-notes \
             --verify-tag \
-            artifacts/*
+            $(find artifacts -type f | sort)

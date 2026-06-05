@@ -4,8 +4,8 @@
 > Keep many repos synced, know what needs attention, and apply small safe automations
 > with a plan-then-apply workflow.
 
-[![CI](https://github.com/quangdang46/repo_forge/actions/workflows/ci.yml/badge.svg)](https://github.com/quangdang46/repo_forge/actions/workflows/ci.yml)
-[![Release](https://github.com/quangdang46/repo_forge/actions/workflows/release.yml/badge.svg)](https://github.com/quangdang46/repo_forge/actions/workflows/release.yml)
+[![CI](https://github.com/quangdang46/repo_forge_orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/quangdang46/repo_forge_orchestrator/actions/workflows/ci.yml)
+[![Release](https://github.com/quangdang46/repo_forge_orchestrator/actions/workflows/release.yml/badge.svg)](https://github.com/quangdang46/repo_forge_orchestrator/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](rust-toolchain.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -36,7 +36,7 @@ preserving the daily UX while adding inspectable runs and AI-safe primitives.
 ### Linux / macOS (x86_64, aarch64)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge_orchestrator/main/install.sh | bash
 ```
 
 The installer detects your platform, downloads the matching release archive
@@ -53,16 +53,16 @@ Optional environment overrides:
 
 ```bash
 # Pin a version
-RFO_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.sh | bash
+RFO_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge_orchestrator/main/install.sh | bash
 
 # Install system-wide
-RFO_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.sh | sudo -E bash
+RFO_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/quangdang46/repo_forge_orchestrator/main/install.sh | sudo -E bash
 ```
 
 ### Windows (x86_64, PowerShell 5.1+)
 
 ```powershell
-irm https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/quangdang46/repo_forge_orchestrator/main/install.ps1 | iex
 ```
 
 Installs `rfo.exe` into `%LOCALAPPDATA%\Programs\rfo` and adds it to your user
@@ -76,7 +76,7 @@ Optional `$env:` overrides: `RFO_VERSION`, `RFO_INSTALL_DIR`,
 Requires [Rust 1.85+](rust-toolchain.toml).
 
 ```bash
-git clone https://github.com/quangdang46/repo_forge.git
+git clone https://github.com/quangdang46/repo_forge_orchestrator.git
 cd repo_forge
 cargo build --release
 ./target/release/rfo --version
@@ -90,7 +90,7 @@ Each tagged release on GitHub publishes:
 - `*.sha256` checksum sidecar for every artifact
 - Universal `rfo-installer.sh` and `rfo-installer.ps1` (cargo-dist installers, version-pinned)
 
-See <https://github.com/quangdang46/repo_forge/releases>.
+See <https://github.com/quangdang46/repo_forge_orchestrator/releases>.
 
 ---
 
@@ -101,7 +101,7 @@ See <https://github.com/quangdang46/repo_forge/releases>.
 rfo init
 
 # 2. Add some repos
-rfo add quangdang46/repo_forge
+rfo add quangdang46/repo_forge_orchestrator
 rfo add https://github.com/torvalds/linux
 
 # 3. Bulk import a list (one "owner/repo" per line)
@@ -283,12 +283,6 @@ cargo xtask --help
 
 Continuous integration runs the same commands on Linux, macOS, and Windows for
 each push and PR — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-
-Releases are tag-driven (`v*.*.*`) and produced by
-[`cargo-dist`](https://github.com/axodotdev/cargo-dist) — see
-[`.github/workflows/release.yml`](.github/workflows/release.yml).
-
----
 
 Releases are tag-driven (`v*.*.*`) and produced by
 [`cargo-dist`](https://github.com/axodotdev/cargo-dist) — see

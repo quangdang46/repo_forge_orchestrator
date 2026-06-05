@@ -29,7 +29,7 @@ authors = ["quangdang46 <quangdang46@github.com>"]
 edition = "2024"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/quangdang46/repo_forge"
+repository = "https://github.com/quangdang46/repo_forge_orchestrator"
 keywords = ["repo", "github", "orchestration", "cli", "devops"]
 categories = ["command-line-utilities", "development-tools"]
 

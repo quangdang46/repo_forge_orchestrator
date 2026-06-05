@@ -1,7 +1,7 @@
 # install.ps1 — One-liner installer for rfo (Repo Forge Orchestrator) on Windows.
 #
 # Usage (pipe-safe — no [CmdletBinding]/param so iex works):
-#   irm "https://raw.githubusercontent.com/quangdang46/repo_forge/main/install.ps1" | iex
+#   irm "https://raw.githubusercontent.com/quangdang46/repo_forge_orchestrator/main/install.ps1" | iex
 #
 # Environment knobs:
 #   $env:RFO_VERSION   Specific version tag (e.g. "v0.1.0").  Default: latest release
@@ -14,7 +14,7 @@
     $ErrorActionPreference = 'Stop'
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    $GH_REPO = 'quangdang46/repo_forge'
+    $GH_REPO = 'quangdang46/repo_forge_orchestrator'
 
     function Write-Step([string]$Message) {
         Write-Host "==> $Message" -ForegroundColor Green
