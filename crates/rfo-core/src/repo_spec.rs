@@ -90,6 +90,13 @@ impl RepoSpec {
             }
         }
 
+        // Strip gh: prefix if present
+        let spec_part = if let Some(rest) = spec_part.strip_prefix("gh:") {
+            rest
+        } else {
+            spec_part
+        };
+
         // Try bare host format: github.com/owner/repo
         if let Some(rest) = spec_part.strip_prefix("github.com/") {
             let rest = rest.strip_suffix(".git").unwrap_or(rest);
@@ -118,6 +125,12 @@ impl RepoSpec {
         if owner.is_empty() || name.is_empty() {
             return Err(crate::CoreError::InvalidRepoSpec(format!(
                 "owner and name must be non-empty: {owner_name_path}"
+            )));
+        }
+        // Reject specs with consecutive slashes (invalid///spec)
+        if owner.contains("//") || name.contains("//") || owner_name_path.contains("//") {
+            return Err(crate::CoreError::InvalidRepoSpec(format!(
+                "invalid repo spec (consecutive slashes): {owner_name_path}"
             )));
         }
         let clone_url = format!("https://{host}/{owner}/{name}.git");

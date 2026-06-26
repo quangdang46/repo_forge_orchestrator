@@ -656,6 +656,9 @@ fn run() -> Result<()> {
             timeout,
             resume: _,
         } => {
+            if clone_only && pull_only {
+                anyhow::bail!("--clone-only and --pull-only cannot be used together");
+            }
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
             let opts = sync::SyncOptions {
                 strategy,
@@ -687,7 +690,8 @@ fn run() -> Result<()> {
             let conn = rfo_state::open_db(&db_path).context("opening state database")?;
             let statuses: Vec<status::RepoStatus> = match repo {
                 Some(key) => {
-                    let r = status::status_repo(&conn, &key)?;
+                    let found = manage::find_repo(&conn, &key)?;
+                    let r = status::status_repo(&conn, &found.id)?;
                     vec![r]
                 }
                 None => status::status_all(&conn)?,
@@ -730,7 +734,18 @@ fn run() -> Result<()> {
                     eprintln!("  {}/{}", p.owner, p.name);
                 }
             } else {
-                eprintln!("Nothing to prune.");
+                let mut hints = Vec::new();
+                if !archived {
+                    hints.push("--archived");
+                }
+                if !missing {
+                    hints.push("--missing");
+                }
+                if hints.is_empty() {
+                    eprintln!("Nothing to prune.");
+                } else {
+                    eprintln!("Nothing to prune. Try: rfo prune {}", hints.join(" "));
+                }
             }
         }
 
@@ -827,13 +842,22 @@ fn run() -> Result<()> {
                 ConflictCommands::MarkResolved { repo } => {
                     let found = manage::find_repo(&conn, &repo)?;
                     let path = PathBuf::from(&found.local_path);
-                    match rfo_git::conflict::verify_resolved(&path) {
-                        Ok(()) => {
-                            eprintln!("Marked {repo} as resolved.");
+                    // First check if user already staged resolution (no conflict markers, no unmerged)
+                    let already_resolved = match rfo_git::conflict::verify_resolved(&path) {
+                        Ok(()) => true,
+                        // Ignore "still in progress" — that's expected if user `git add`'d but hasn't finished merge
+                        Err(rfo_git::conflict::MarkResolvedError::OperationStillInProgress(_)) => {
+                            false
                         }
-                        Err(e) => {
-                            anyhow::bail!("cannot mark {repo} resolved: {e}");
-                        }
+                        Err(e) => anyhow::bail!("cannot mark {repo} resolved: {e}"),
+                    };
+                    if already_resolved {
+                        eprintln!("{repo} already resolved.");
+                    } else {
+                        // User resolved files & staged them; finish the merge
+                        rfo_git::conflict::finish(&path)
+                            .context("finishing merge after resolution")?;
+                        eprintln!("Marked {repo} as resolved.");
                     }
                 }
             }

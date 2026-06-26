@@ -165,6 +165,36 @@ pub fn abort(repo_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Finish (commit) an in-progress merge/rebase after conflict resolution.
+///
+/// Runs `git <op> --continue` with a no-op editor to complete the operation.
+pub fn finish(repo_path: &Path) -> Result<()> {
+    let git_dir = find_git_dir(repo_path)?;
+    let op = detect_op(&git_dir)?.context("no in-progress operation to finish")?;
+    let output = std::process::Command::new("git")
+        .arg(op.to_string())
+        .arg("--continue")
+        .current_dir(repo_path)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("LC_ALL", "C")
+        .env("GIT_EDITOR", "true")
+        .output()
+        .with_context(|| format!("running git {} --continue in {}", op, repo_path.display()))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("git {} --continue failed: {stderr}", op);
+    }
+    // Verify cleanup
+    if detect(repo_path)?.is_some() {
+        tracing::warn!(
+            "git {} --continue completed but conflict state still detected in {}",
+            op,
+            repo_path.display()
+        );
+    }
+    Ok(())
+}
+
 /// Verifies that a previously-conflicted repo is now resolved.
 ///
 /// Returns `Ok(())` if:
@@ -180,20 +210,27 @@ pub fn abort(repo_path: &Path) -> Result<()> {
 /// of silently claiming success.
 pub fn verify_resolved(repo_path: &Path) -> Result<(), MarkResolvedError> {
     let git_dir = find_git_dir(repo_path).map_err(MarkResolvedError::NotARepo)?;
-    if let Some(op) = detect_op(&git_dir).map_err(MarkResolvedError::NotARepo)? {
-        return Err(MarkResolvedError::OperationStillInProgress(op));
+
+    // Check conflict markers FIRST (user hasn't resolved yet)
+    let with_markers =
+        files_with_conflict_markers(repo_path).map_err(MarkResolvedError::IndexQueryFailed)?;
+    if !with_markers.is_empty() {
+        return Err(MarkResolvedError::ConflictMarkersRemain(with_markers));
     }
+
+    // Check unmerged entries SECOND (user hasn't resolved or staged yet)
     let unmerged = list_conflicted_files(repo_path).map_err(MarkResolvedError::IndexQueryFailed)?;
     if !unmerged.is_empty() {
         return Err(MarkResolvedError::UnmergedEntries(
             unmerged.into_iter().map(|f| f.path).collect(),
         ));
     }
-    let with_markers =
-        files_with_conflict_markers(repo_path).map_err(MarkResolvedError::IndexQueryFailed)?;
-    if !with_markers.is_empty() {
-        return Err(MarkResolvedError::ConflictMarkersRemain(with_markers));
+
+    // Operation still in progress LAST — files are clean, only need to --continue
+    if let Some(op) = detect_op(&git_dir).map_err(MarkResolvedError::NotARepo)? {
+        return Err(MarkResolvedError::OperationStillInProgress(op));
     }
+
     Ok(())
 }
 

@@ -86,8 +86,12 @@ pub fn init(paths: &ConfigPaths) -> Result<bool> {
 
 /// Add a repo to tracking. Parses the spec, resolves the local path, and
 /// inserts into the `repos` table. Fails on duplicate (host, owner, name).
+/// Owner and name are normalized to lowercase (GitHub is case-insensitive).
 pub fn add(conn: &Connection, spec_str: &str, projects_dir: &Path) -> Result<TrackedRepo> {
-    let spec = RepoSpec::parse(spec_str).map_err(|e| anyhow::anyhow!("invalid repo spec: {e}"))?;
+    let mut spec =
+        RepoSpec::parse(spec_str).map_err(|e| anyhow::anyhow!("invalid repo spec: {e}"))?;
+    spec.owner = spec.owner.to_ascii_lowercase();
+    spec.name = spec.name.to_ascii_lowercase();
 
     let existing: Option<String> = conn
         .query_row(
@@ -247,12 +251,13 @@ pub fn import(conn: &Connection, file_path: &Path, projects_dir: &Path) -> Resul
 }
 
 /// Find a repo by `owner/name`, alias, or raw id.
+/// Owner/name lookups are case-insensitive (GitHub convention).
 pub fn find_repo(conn: &Connection, key: &str) -> Result<TrackedRepo> {
     // Try owner/name
     let parts: Vec<&str> = key.splitn(2, '/').collect();
     if parts.len() == 2 {
         if let Ok(r) = conn.query_row(
-            &format!("SELECT {REPO_COLUMNS} FROM repos WHERE owner=?1 AND name=?2"),
+            &format!("SELECT {REPO_COLUMNS} FROM repos WHERE LOWER(owner)=LOWER(?1) AND LOWER(name)=LOWER(?2)"),
             params![parts[0], parts[1]],
             row_to_tracked,
         ) {

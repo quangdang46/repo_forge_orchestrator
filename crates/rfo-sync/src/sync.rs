@@ -124,7 +124,31 @@ pub fn sync_repo(
             ..Default::default()
         };
         match rfo_git::mutation::clone(&repo.clone_url, local, &clone_opts) {
-            Ok(_outcome) => {
+            Ok(outcome) => {
+                if !outcome.result.ok() {
+                    let duration = start.elapsed().as_millis() as u64;
+                    let err_msg = outcome.result.stderr.trim().to_string();
+                    record_result(
+                        conn,
+                        run_id,
+                        &repo.id,
+                        "clone",
+                        "error",
+                        duration,
+                        Some(&err_msg),
+                        &pre_oid,
+                        &None,
+                    );
+                    return SyncResult {
+                        repo_id: repo.id.clone(),
+                        action: "clone".into(),
+                        status: "error".into(),
+                        duration_ms: duration,
+                        error: Some(err_msg),
+                        pre_oid,
+                        post_oid: None,
+                    };
+                }
                 let post_oid = rfo_git::read::head_oid(local).ok().flatten();
                 let duration = start.elapsed().as_millis() as u64;
                 record_result(
