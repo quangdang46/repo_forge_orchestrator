@@ -573,8 +573,10 @@ mod tests {
         let msg = err.to_string();
         // Either the operation flag is still around, or the index has unmerged
         // entries — both are valid pre-resolution states.
+        // With the new check order (markers → unmerged → op), conflict markers
+        // are detected first — any of these is a valid pre-resolution state.
         assert!(
-            msg.contains("merge") || msg.contains("unmerged"),
+            msg.contains("merge") || msg.contains("unmerged") || msg.contains("conflict markers"),
             "unexpected error: {msg}"
         );
     }
