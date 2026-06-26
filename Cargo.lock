@@ -2928,7 +2928,7 @@ dependencies = [
 
 [[package]]
 name = "rfo"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2958,7 +2958,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-ai-sync"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "rfo-config",
@@ -2974,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2989,7 +2989,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-context"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "rfo-config",
@@ -3006,7 +3006,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -3020,7 +3020,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-dep-update"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "rfo-config",
@@ -3036,7 +3036,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-git"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "fs4",
@@ -3052,7 +3052,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-github"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3069,7 +3069,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-jobs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "rfo-core",
@@ -3085,7 +3085,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "rfo-config",
@@ -3106,7 +3106,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-ntm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -3118,7 +3118,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-output"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "comfy-table",
@@ -3132,7 +3132,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-provider"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3146,7 +3146,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-review"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "comfy-table",
@@ -3168,7 +3168,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "rfo-core",
@@ -3183,7 +3183,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-sweep"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "comfy-table",
@@ -3208,7 +3208,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-sync"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3231,7 +3231,7 @@ dependencies = [
 
 [[package]]
 name = "rfo-testkit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "rfo-core",
@@ -4868,7 +4868,7 @@ checksum = "32ac00cd3f8ec9c1d33fb3e7958a82df6989c42d747bd326c822b1d625283547"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "xshell",
