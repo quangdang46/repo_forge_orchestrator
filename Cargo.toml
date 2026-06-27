@@ -18,7 +18,6 @@ members = [
     "crates/rfo-ai-sync",
     "crates/rfo-dep-update",
     "crates/rfo-testkit",
-    "xtask",
 ]
 resolver = "3"
 default-members = ["crates/rfo"]
